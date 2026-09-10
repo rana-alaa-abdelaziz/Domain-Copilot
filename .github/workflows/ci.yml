@@ -20,8 +20,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Lint (ruff)
-        run: ruff check . || true
+        run: ruff check .
       - name: Tests
+        env:
+          PYTHONPATH: ..
         run: pytest
 
   frontend:
@@ -41,8 +43,17 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret Scanning (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -50,4 +61,4 @@ jobs:
       - name: Dependency scan (backend)
         run: |
           pip install pip-audit
-          pip-audit -r backend/requirements.txt || true
+          pip-audit -r backend/requirements.txt
