@@ -10,3 +10,7 @@ class DomainError(Exception):
 
 class InsufficientEvidenceError(DomainError):
     """Raised when a decision (e.g. gap assignment) lacks enough evidence to proceed."""
+
+class PublicationBlockedError(DomainError):
+    """Raised when an attempt is made to publish an item whose ReviewTask
+    is not in an approved state."""
