@@ -21,7 +21,7 @@ RESTRICTED_IMPORTS = {
     "httpx",
 }
 
-RESTRICTED_ROOTS = ["domain", "application"]
+RESTRICTED_ROOTS = ["backend/domain", "backend/application"]
 
 def _iter_py_files():
     for root in RESTRICTED_ROOTS:
