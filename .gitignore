@@ -1,23 +1,31 @@
-# Node/React
-node_modules/
-dist/
-build/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Env & secrets
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Secrets & Environment variables
 .env
 .env.local
 *.pem
 *.key
 
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend
+node_modules/
+dist/
+.next/
+
 # IDE
 .vscode/
 .idea/
-
-# OS
-.DS_Store
-
-# Docker
-*.log
-
-__pycache__
-*.pyc
+*.swp
