@@ -1,0 +1,9 @@
+{
+  "name": "domain-copilot-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo \"no lint configured yet\" && exit 0",
+    "build": "echo \"no build configured yet\" && exit 0"
+  }
+}
