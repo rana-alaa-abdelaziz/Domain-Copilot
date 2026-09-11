@@ -9,6 +9,23 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+
+    # Service container for tests requiring a database
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: domain_copilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: backend
@@ -26,6 +43,7 @@ jobs:
       - name: Tests
         env:
           PYTHONPATH: ..
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domain_copilot
         run: pytest
 
   frontend:
