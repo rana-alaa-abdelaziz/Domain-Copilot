@@ -16,8 +16,8 @@ jobs:
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: domain_copilot
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -43,7 +43,8 @@ jobs:
       - name: Tests
         env:
           PYTHONPATH: ..
-          DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/domain_copilot
+          DATABASE_URL: postgresql://postgres@localhost:${{ job.services.postgres.ports[5432] }}/domain_copilot
+
         run: pytest
 
   frontend:
