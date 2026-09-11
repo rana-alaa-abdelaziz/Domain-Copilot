@@ -12,6 +12,8 @@ infrastructure/vectorstore.
 
 from abc import ABC, abstractmethod
 
+from backend.domain.ports.document_repository import DocumentRepository
+
 
 class LlmProvider(ABC):
     @abstractmethod
@@ -33,3 +35,10 @@ class VectorStore(ABC):
 
     @abstractmethod
     def query(self, vector: list[float], top_k: int = 5) -> list[dict]: ...
+
+
+__all__ = [
+    "DocumentRepository",
+    "LlmProvider",
+    "VectorStore",
+]

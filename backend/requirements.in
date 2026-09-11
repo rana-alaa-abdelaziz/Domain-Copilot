@@ -8,3 +8,4 @@ alembic
 psycopg2-binary
 pgvector
 sqlalchemy
+PyMuPDF==1.24.10
