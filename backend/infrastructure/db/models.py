@@ -59,7 +59,15 @@ class IngestionStatus(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     doc_id = Column(UUID(as_uuid=False), ForeignKey("document.doc_id"), nullable=False, unique=True)
-    status = Column(Enum(IngestionStatusEnum), nullable=False, default=IngestionStatusEnum.PENDING)
+    status = Column(
+        Enum(
+            IngestionStatusEnum,
+            name="ingestion_status_enum",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=IngestionStatusEnum.PENDING,
+    )
     error_message = Column(Text, nullable=True)         # populated only when status == FAILED
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 

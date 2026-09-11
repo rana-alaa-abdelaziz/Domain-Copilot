@@ -14,3 +14,20 @@ class InsufficientEvidenceError(DomainError):
 class PublicationBlockedError(DomainError):
     """Raised when an attempt is made to publish an item whose ReviewTask
     is not in an approved state."""
+
+
+from backend.domain.errors.ingestion_errors import (
+    ChunkingError,
+    DocumentExtractionError,
+    UnsupportedFileTypeError,
+)
+
+__all__ = [
+    "ChunkingError",
+    "DocumentExtractionError",
+    "DomainError",
+    "InsufficientEvidenceError",
+    "PublicationBlockedError",
+    "UnsupportedFileTypeError",
+]
+

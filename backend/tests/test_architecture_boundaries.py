@@ -21,11 +21,13 @@ RESTRICTED_IMPORTS = {
     "httpx",
 }
 
-RESTRICTED_ROOTS = ["backend/domain", "backend/application"]
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+RESTRICTED_ROOTS = [BACKEND_DIR / "domain", BACKEND_DIR / "application"]
+
 
 def _iter_py_files():
     for root in RESTRICTED_ROOTS:
-        yield from Path(root).rglob("*.py")
+        yield from root.rglob("*.py")
 
 
 def _imports_in(path: Path) -> set[str]:
@@ -39,7 +41,9 @@ def _imports_in(path: Path) -> set[str]:
     return found
 
 
-@pytest.mark.parametrize("path", list(_iter_py_files()), ids=lambda p: str(p))
+@pytest.mark.parametrize(
+    "path", list(_iter_py_files()), ids=lambda p: str(p.relative_to(BACKEND_DIR))
+)
 def test_no_restricted_imports(path: Path):
     found = _imports_in(path) & RESTRICTED_IMPORTS
     assert not found, f"{path} imports restricted package(s): {found}"

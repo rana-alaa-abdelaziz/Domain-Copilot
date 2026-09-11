@@ -98,9 +98,9 @@ class IngestDocumentUseCase:
             )
             raise DocumentExtractionError(f"No extractable text in {file_path.name}")
 
-        # READY here means "extracted"; chunk/embed/index stages will move
-        # it further along in their own use cases.
-        self._set_status(document.doc_id, IngestionStatusEnum.READY)
+        # Extracted successfully; status remains PROCESSING until the full pipeline
+        # (chunk, embed, index) completes.
+        self._set_status(document.doc_id, IngestionStatusEnum.PROCESSING)
         document.updated_at = datetime.now(timezone.utc)
         self._repository.save_document(document)
         return IngestionResult(document=document, pages=pages, was_skipped=False)

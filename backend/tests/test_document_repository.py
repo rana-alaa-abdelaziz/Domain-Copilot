@@ -1,7 +1,9 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
 import pytest
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -14,20 +16,40 @@ from backend.domain.entities.document import (
 from backend.domain.entities.document import (
     IngestionStatusEnum as DomainIngestionStatusEnum,
 )
-from backend.infrastructure.db.models import Base
+from backend.infrastructure.db.models import (
+    Base,
+)
+from backend.infrastructure.db.models import (
+    Chunk as OrmChunk,
+)
+from backend.infrastructure.db.models import (
+    Document as OrmDocument,
+)
+from backend.infrastructure.db.models import (
+    IngestionStatus as OrmIngestionStatus,
+)
 from backend.infrastructure.db.repositories.document_repository import (
     SqlAlchemyDocumentRepository,
 )
 
+load_dotenv()
+RAW_DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot")
+DB_URL = RAW_DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1) if RAW_DB_URL.startswith("postgresql://") else RAW_DB_URL
+
 
 @pytest.fixture
 def db_session():
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(DB_URL)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    session.query(OrmChunk).delete()
+    session.query(OrmIngestionStatus).delete()
+    session.query(OrmDocument).delete()
+    session.commit()
     yield session
     session.close()
+
 
 
 def test_save_and_get_document_by_hash(db_session):
@@ -169,7 +191,7 @@ def test_ingest_use_case_with_sqlalchemy_repository(db_session, tmp_path):
     assert stored_doc.source == "math_standards.pdf"
     stored_status = repo.get_ingestion_status(stored_doc.doc_id)
     assert stored_status is not None
-    assert stored_status.status == DomainIngestionStatusEnum.READY
+    assert stored_status.status == DomainIngestionStatusEnum.PROCESSING
 
     # 2. Idempotent re-ingestion
     reingest_result = use_case.execute(dummy_pdf, source="math_standards.pdf", version="1.0")

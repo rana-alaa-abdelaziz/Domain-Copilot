@@ -12,6 +12,7 @@ infrastructure/vectorstore.
 
 from abc import ABC, abstractmethod
 
+from backend.domain.ports.chunk_repository import ChunkRepository
 from backend.domain.ports.document_repository import DocumentRepository
 
 
@@ -38,7 +39,9 @@ class VectorStore(ABC):
 
 
 __all__ = [
+    "ChunkRepository",
     "DocumentRepository",
     "LlmProvider",
     "VectorStore",
-]
+]
+

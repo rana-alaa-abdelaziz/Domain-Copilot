@@ -27,4 +27,21 @@ accepted.
 - **Infrastructure Implementation**: Implemented `SqlAlchemyDocumentRepository` in
   `backend/infrastructure/db/repositories/document_repository.py` satisfying the domain port
   `backend/domain/ports/document_repository.py`. Resolved enum case sensitivity
-  (`IngestionStatusEnum`) so domain entities align with the underlying PostgreSQL enum schema.
+  (`IngestionStatusEnum`) so domain entities align with the underlying PostgreSQL enum schema.
+- **Premature READY Status Correction**: Fixed `IngestDocumentUseCase` setting `IngestionStatusEnum.READY`
+  prematurely after extraction; changed status to `PROCESSING` because full ingestion completion
+  is reserved for the final embedding/indexing phase.
+- **Pipeline Composition**: Implemented `IngestPipelineUseCase` in `backend/application/use_cases/ingest_pipeline.py`
+  composing `IngestDocumentUseCase` and `ChunkDocumentUseCase`, ensuring chunking is bypassed on idempotent
+  re-ingestion. Verified against live PostgreSQL container with `test_ingest_pipeline.py`.
+
+## 2026-09-12
+- **CI Service Container Port Resolution**: On GitHub Actions runner hosts, service container
+  ports map to dynamic host ports rather than binding directly to `localhost:5432`. Replaced
+  hardcoded `5432` in CI `DATABASE_URL` with `${{ job.services.postgres.ports[5432] }}` to fix
+  `psycopg2.OperationalError: Connection refused`. Maintained strict zero-secret compliance
+  (using only runner test container dummy parameters).
+- **Architecture Boundary Test Discovery in CI**: In CI, `working-directory: backend` caused
+  `Path("backend/domain")` to look for `backend/backend/domain`, finding 0 files and silently
+  skipping boundary validation. Anchored `RESTRICTED_ROOTS` to `Path(__file__).resolve().parents[1]`
+  so all 15 domain/application files are strictly validated regardless of invocation directory.
