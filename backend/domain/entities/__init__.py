@@ -1,3 +1,4 @@
+from backend.domain.entities.chunk import Chunk
 from backend.domain.entities.document import (
     Document,
     IngestionStatus,
@@ -19,8 +20,10 @@ class ReviewTask:
 
 __all__ = [
     "AssessmentItem",
+    "Chunk",
     "Document",
     "IngestionStatus",
     "IngestionStatusEnum",
     "ReviewTask",
-]
+]
+

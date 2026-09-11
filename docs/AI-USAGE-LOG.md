@@ -27,4 +27,10 @@ accepted.
 - **Infrastructure Implementation**: Implemented `SqlAlchemyDocumentRepository` in
   `backend/infrastructure/db/repositories/document_repository.py` satisfying the domain port
   `backend/domain/ports/document_repository.py`. Resolved enum case sensitivity
-  (`IngestionStatusEnum`) so domain entities align with the underlying PostgreSQL enum schema.
+  (`IngestionStatusEnum`) so domain entities align with the underlying PostgreSQL enum schema.
+- **Premature READY Status Correction**: Fixed `IngestDocumentUseCase` setting `IngestionStatusEnum.READY`
+  prematurely after extraction; changed status to `PROCESSING` because full ingestion completion
+  is reserved for the final embedding/indexing phase.
+- **Pipeline Composition**: Implemented `IngestPipelineUseCase` in `backend/application/use_cases/ingest_pipeline.py`
+  composing `IngestDocumentUseCase` and `ChunkDocumentUseCase`, ensuring chunking is bypassed on idempotent
+  re-ingestion. Verified against live PostgreSQL container with `test_ingest_pipeline.py`.

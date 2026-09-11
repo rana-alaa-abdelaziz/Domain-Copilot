@@ -66,7 +66,7 @@ def test_fresh_ingestion_success(tmp_path: Path):
 
     saved_status = fake_repo.get_ingestion_status(result.document.doc_id)
     assert saved_status is not None
-    assert saved_status.status == IngestionStatusEnum.READY
+    assert saved_status.status == IngestionStatusEnum.PROCESSING
     assert saved_status.error_message is None
 
 
