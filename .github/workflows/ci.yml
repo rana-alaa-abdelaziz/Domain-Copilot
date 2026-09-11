@@ -43,7 +43,7 @@ jobs:
       - name: Tests
         env:
           PYTHONPATH: ..
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domain_copilot
+          DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/domain_copilot
         run: pytest
 
   frontend:
