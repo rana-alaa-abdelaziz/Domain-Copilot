@@ -55,5 +55,8 @@ accepted.
   - Enforced 768-dimension consistency across all vector representations: `OpenAIAdapter` (`text-embedding-3-small` with `dimensions=768`), `OllamaAdapter` (`nomic-embed-text`), `StubLlmAdapter` (`[0.0] * 768`), `models.py` (`Vector(768)`), and `Settings.embedding_dim`.
   - Composed `EmbedChunksUseCase` into `IngestPipelineUseCase`, transitioning documents to `IngestionStatusEnum.READY` only upon successful embedding persistence.
   - Updated dependencies in `backend/requirements.in` (`openai`, `ollama`), compiled `backend/requirements.txt` via `pip-compile`, and validated with `pip-audit` (0 known vulnerabilities). All 50 tests passing (45 passed, 5 expected xfailed approval gates) and ruff lint clean.
-
+- **CI pgvector Extension Initialization on Fresh Test Databases**:
+  - In CI runner containers where tests run against fresh empty PostgreSQL databases without running Alembic migrations first, `Base.metadata.create_all(engine)` in `test_document_repository.py` failed with `psycopg2.errors.UndefinedObject: type "vector" does not exist`.
+  - Added a SQLAlchemy `before_create` DDL listener on `Base.metadata` in `backend/infrastructure/db/models.py` (`DDL("CREATE EXTENSION IF NOT EXISTS vector;").execute_if(dialect="postgresql")`) so any call to `create_all` automatically activates the vector extension on PostgreSQL.
+  - Also explicitly added extension initialization to the `db_session` fixture in `backend/tests/test_document_repository.py`.
 

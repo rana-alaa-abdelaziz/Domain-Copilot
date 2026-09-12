@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.domain.entities.document import (
@@ -40,6 +40,9 @@ DB_URL = RAW_DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1) if RAW
 @pytest.fixture
 def db_session():
     engine = create_engine(DB_URL)
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        conn.commit()
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
