@@ -46,7 +46,9 @@ class IngestDocumentUseCase:
         if extractors is not None:
             self._extractors = extractors
         else:
-            from backend.infrastructure.ingestion.docx_extractor import extract_docx_text
+            from backend.infrastructure.ingestion.docx_extractor import (
+                extract_docx_text,
+            )
             from backend.infrastructure.ingestion.pdf_extractor import extract_pdf_text
 
             self._extractors = {
