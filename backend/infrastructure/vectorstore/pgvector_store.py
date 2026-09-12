@@ -48,10 +48,14 @@ class PgVectorStore(VectorStore):
                        1 - (embedding <=> CAST(:query_vector AS vector)) AS score
                 FROM chunk
                 WHERE embedding IS NOT NULL
+                  AND (embedding <=> CAST(:query_vector AS vector)) < 1.0
                 ORDER BY embedding <=> CAST(:query_vector AS vector)
                 LIMIT :top_k
                 """
             ),
             {"query_vector": str(vector), "top_k": top_k},
         ).mappings().all()
-        return [dict(row) for row in rows]
+        return [
+            {**dict(row), "chunk_id": str(row["chunk_id"]), "doc_id": str(row["doc_id"])}
+            for row in rows
+        ]

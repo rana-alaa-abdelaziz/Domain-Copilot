@@ -34,7 +34,7 @@ from backend.infrastructure.llm.stub_adapter import StubLlmAdapter
 
 load_dotenv()
 RAW_DB_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot"
+    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot_test"
 )
 DB_URL = (
     RAW_DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1)

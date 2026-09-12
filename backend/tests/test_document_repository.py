@@ -33,7 +33,9 @@ from backend.infrastructure.db.repositories.document_repository import (
 )
 
 load_dotenv()
-RAW_DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot")
+RAW_DB_URL = os.getenv(
+    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot_test"
+)
 DB_URL = RAW_DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1) if RAW_DB_URL.startswith("postgresql://") else RAW_DB_URL
 
 
