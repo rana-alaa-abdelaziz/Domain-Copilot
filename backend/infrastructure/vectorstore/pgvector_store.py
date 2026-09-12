@@ -41,6 +41,22 @@ class PgVectorStore(VectorStore):
         # so score is reported as 1 - distance to read as "higher is better"
         # for consistency with how a fusion step will combine this with
         # keyword scores later.
+        #
+        # MIN_SIMILARITY floor: cosine similarity search has no native
+        # concept of "no match" — ORDER BY ... LIMIT k always returns k
+        # rows, even for a totally out-of-corpus query, because it ranks
+        # by relative closeness, not absolute relevance. The previous
+        # `distance < 1.0` filter here was effectively a no-op (cosine
+        # distance is almost always under 1.0 regardless of actual
+        # relevance), which is exactly why the first real eval run
+        # (scripts/eval.py) showed 0% refusal correctness: unrelated
+        # queries still got back their "5 least-dissimilar" chunks, one
+        # of which landed at dense-rank #1 and picked up a real RRF
+        # fusion score. 0.3 is a starting value based on that run's
+        # observed scores — genuinely unrelated queries scored well below
+        # this, real matches well above — recalibrate from real numbers
+        # as the corpus grows, per FR-3's "record real numbers" guidance.
+        MIN_SIMILARITY = 0.3
         rows = self._session.execute(
             text(
                 """
@@ -48,12 +64,16 @@ class PgVectorStore(VectorStore):
                        1 - (embedding <=> CAST(:query_vector AS vector)) AS score
                 FROM chunk
                 WHERE embedding IS NOT NULL
-                  AND (embedding <=> CAST(:query_vector AS vector)) < 1.0
+                  AND 1 - (embedding <=> CAST(:query_vector AS vector)) >= :min_similarity
                 ORDER BY embedding <=> CAST(:query_vector AS vector)
                 LIMIT :top_k
                 """
             ),
-            {"query_vector": str(vector), "top_k": top_k},
+            {
+                "query_vector": str(vector),
+                "top_k": top_k,
+                "min_similarity": MIN_SIMILARITY,
+            },
         ).mappings().all()
         return [
             {**dict(row), "chunk_id": str(row["chunk_id"]), "doc_id": str(row["doc_id"])}
