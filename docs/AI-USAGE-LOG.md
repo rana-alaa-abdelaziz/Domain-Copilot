@@ -76,5 +76,11 @@ accepted.
   - Implemented `scripts/run_full_ingestion.py` and re-ingested the full 30-document standards corpus into `domain_copilot` using local Ollama (`nomic-embed-text`), populating 30 documents, 497 chunks, and 497 embeddings. Verified idempotency (0 new rows on re-run).
   - Verified NASSCOM PDF extraction: 0 chunks contained the bare `QG-03` header, and standard ID `SSC/N0506` was correctly extracted.
   - Ran full test suite (62 items: 57 passed, 5 xfailed) and confirmed dev DB row counts remained at exactly 30 documents and 497 chunks post-test.
+- **CI Test Database Provisioning and TSVECTOR ORM Model Alignment**:
+  - In GitHub Actions CI runner environments, tests failed with `FATAL: database "domain_copilot_test" does not exist`. The PostgreSQL service container was initialized with `POSTGRES_DB: domain_copilot`, while `ci.yml` only set `DATABASE_URL` (using dynamic port `${{ job.services.postgres.ports[5432] }}`) without creating `domain_copilot_test` or setting `TEST_DATABASE_URL`.
+  - Added a `Create test database` step in `.github/workflows/ci.yml` to run `CREATE DATABASE domain_copilot_test;` on the CI PostgreSQL instance, and explicitly set `TEST_DATABASE_URL` in the `Tests` step.
+  - Created `backend/tests/db_test_utils.py` providing `get_test_db_url()` and `ensure_test_db_exists(db_url)`: derives the test database from `DATABASE_URL` when `TEST_DATABASE_URL` is omitted, and self-heals by connecting to any accessible maintenance database (`postgres`, `domain_copilot`, or `template1`) to auto-create `domain_copilot_test` if missing.
+  - Added `search_vector = Column(TSVECTOR, Computed("to_tsvector('english', content)", persisted=True))` and `Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin")` to `Chunk` in `backend/infrastructure/db/models.py`. This ensures fresh test databases constructed via `Base.metadata.create_all(engine)` contain the stored `search_vector` column and GIN index required by `PgKeywordSearch`.
+
 
 

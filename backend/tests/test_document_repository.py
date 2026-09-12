@@ -1,9 +1,7 @@
-import os
 import uuid
 from datetime import datetime, timezone
 
 import pytest
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -31,16 +29,14 @@ from backend.infrastructure.db.models import (
 from backend.infrastructure.db.repositories.document_repository import (
     SqlAlchemyDocumentRepository,
 )
+from backend.tests.db_test_utils import ensure_test_db_exists, get_test_db_url
 
-load_dotenv()
-RAW_DB_URL = os.getenv(
-    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/domain_copilot_test"
-)
-DB_URL = RAW_DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1) if RAW_DB_URL.startswith("postgresql://") else RAW_DB_URL
+DB_URL = get_test_db_url()
 
 
 @pytest.fixture
 def db_session():
+    ensure_test_db_exists(DB_URL)
     engine = create_engine(DB_URL)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
