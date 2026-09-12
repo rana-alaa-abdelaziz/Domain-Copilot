@@ -44,4 +44,7 @@ accepted.
 - **Architecture Boundary Test Discovery in CI**: In CI, `working-directory: backend` caused
   `Path("backend/domain")` to look for `backend/backend/domain`, finding 0 files and silently
   skipping boundary validation. Anchored `RESTRICTED_ROOTS` to `Path(__file__).resolve().parents[1]`
-  so all 15 domain/application files are strictly validated regardless of invocation directory.
+  so all 15 domain/application files are strictly validated regardless of invocation directory.
+- **PDF Extractor Cross-Page Header/Footer Stripping**: Refactored `extract_pdf_text` in `backend/infrastructure/ingestion/pdf_extractor.py` to identify and strip recurring headers/footers across document pages. Replaced single-page `_clean_text` with document-wide frequency analysis (`_find_repeated_lines`) thresholded at 50% page repetition (minimum 2 occurrences), preventing recurring header/footer text from polluting downstream chunks and falsely triggering standard ID extraction.
+- **Extended Standard ID Detection**: Extended `_STANDARD_ID_PATTERN` in `backend/domain/services/chunking.py` to support slash-separated identifiers (e.g., `SSC/N0506`, `ISO/IEC27001`, `MEP/Q2601`) in addition to hyphen/dot formats. Added dedicated unit test coverage in `tests/test_pdf_extractor.py` and `tests/test_chunking.py`.
+

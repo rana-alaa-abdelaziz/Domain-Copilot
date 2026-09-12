@@ -103,7 +103,6 @@ def test_pipeline_extracts_and_chunks_new_document(db_session, sample_pdf: Path)
     assert len(persisted_chunks) == len(result.chunking.chunks)
     assert persisted_chunks[0].standard_id == "STD-101.1"
 
-
 def test_pipeline_skips_chunking_on_idempotent_reingestion(
     db_session, sample_pdf: Path
 ):
