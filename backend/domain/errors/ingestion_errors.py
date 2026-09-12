@@ -14,3 +14,8 @@ class DocumentExtractionError(DomainError):
 
 class ChunkingError(DomainError):
     """Raised when chunking produces zero chunks despite extracted text."""
+
+
+class EmbeddingError(DomainError):
+    """Raised when the LLM provider fails to produce an embedding for a
+    chunk (provider error, rate limit, malformed response)."""

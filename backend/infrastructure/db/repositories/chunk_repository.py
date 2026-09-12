@@ -46,8 +46,37 @@ class SqlAlchemyChunkRepository(ChunkRepository):
         if self._auto_commit:
             self._session.commit()
 
+    def get_unembedded_chunks(self, doc_id: str) -> list[DomainChunk]:
+        orm_chunks = (
+            self._session.query(OrmChunk)
+            .filter(OrmChunk.doc_id == doc_id, OrmChunk.embedding.is_(None))
+            .order_by(OrmChunk.chunk_index)
+            .all()
+        )
+        return [self._to_domain(c) for c in orm_chunks]
+
+    def save_embeddings(self, embeddings: dict[str, list[float]]) -> None:
+        if not embeddings:
+            return
+        for chunk_id, vector in embeddings.items():
+            self._session.query(OrmChunk).filter(OrmChunk.chunk_id == chunk_id).update(
+                {OrmChunk.embedding: vector}
+            )
+        if self._auto_commit:
+            self._session.commit()
+
     @staticmethod
     def _to_domain(orm_chunk: OrmChunk) -> DomainChunk:
+        raw_embedding = orm_chunk.embedding
+        if raw_embedding is not None:
+            embedding = (
+                raw_embedding.tolist()
+                if hasattr(raw_embedding, "tolist")
+                else list(raw_embedding)
+            )
+        else:
+            embedding = None
+
         return DomainChunk(
             chunk_id=orm_chunk.chunk_id,
             doc_id=orm_chunk.doc_id,
@@ -57,4 +86,5 @@ class SqlAlchemyChunkRepository(ChunkRepository):
             created_at=orm_chunk.created_at,
             standard_id=orm_chunk.standard_id,
             hierarchy_path=orm_chunk.hierarchy_path,
+            embedding=embedding,
         )

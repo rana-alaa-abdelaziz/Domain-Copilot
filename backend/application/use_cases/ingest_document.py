@@ -24,16 +24,6 @@ from backend.domain.errors.ingestion_errors import (
     UnsupportedFileTypeError,
 )
 from backend.domain.ports.document_repository import DocumentRepository
-from backend.infrastructure.ingestion.docx_extractor import extract_docx_text
-from backend.infrastructure.ingestion.pdf_extractor import (
-    compute_file_hash,
-    extract_pdf_text,
-)
-
-_DEFAULT_EXTRACTORS: dict[str, Callable[[Path], list[dict]]] = {
-    ".pdf": extract_pdf_text,
-    ".docx": extract_docx_text,
-}
 
 
 @dataclass(frozen=True)
@@ -51,8 +41,27 @@ class IngestDocumentUseCase:
         hash_fn: Callable[[Path], str] | None = None,
     ):
         self._repository = repository
-        self._extractors = extractors if extractors is not None else _DEFAULT_EXTRACTORS
-        self._hash_fn = hash_fn if hash_fn is not None else compute_file_hash
+
+        # Lazy load infrastructure defaults only when not injected
+        if extractors is not None:
+            self._extractors = extractors
+        else:
+            from backend.infrastructure.ingestion.docx_extractor import (
+                extract_docx_text,
+            )
+            from backend.infrastructure.ingestion.pdf_extractor import extract_pdf_text
+
+            self._extractors = {
+                ".pdf": extract_pdf_text,
+                ".docx": extract_docx_text,
+            }
+
+        if hash_fn is not None:
+            self._hash_fn = hash_fn
+        else:
+            from backend.infrastructure.ingestion.pdf_extractor import compute_file_hash
+
+            self._hash_fn = compute_file_hash
 
     def execute(self, file_path: Path, source: str, version: str) -> IngestionResult:
         file_hash = self._hash_fn(file_path)

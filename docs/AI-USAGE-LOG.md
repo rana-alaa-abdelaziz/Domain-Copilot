@@ -47,4 +47,16 @@ accepted.
   so all 15 domain/application files are strictly validated regardless of invocation directory.
 - **PDF Extractor Cross-Page Header/Footer Stripping**: Refactored `extract_pdf_text` in `backend/infrastructure/ingestion/pdf_extractor.py` to identify and strip recurring headers/footers across document pages. Replaced single-page `_clean_text` with document-wide frequency analysis (`_find_repeated_lines`) thresholded at 50% page repetition (minimum 2 occurrences), preventing recurring header/footer text from polluting downstream chunks and falsely triggering standard ID extraction.
 - **Extended Standard ID Detection**: Extended `_STANDARD_ID_PATTERN` in `backend/domain/services/chunking.py` to support slash-separated identifiers (e.g., `SSC/N0506`, `ISO/IEC27001`, `MEP/Q2601`) in addition to hyphen/dot formats. Added dedicated unit test coverage in `tests/test_pdf_extractor.py` and `tests/test_chunking.py`.
+- **Embedding Stage Integration and Domain Entity Fix**:
+  - Diagnosed and fixed `Unexpected keyword argument 'embedding' in function backend.domain.entities.chunk.Chunk.__init__`: added `embedding: list[float] | None = None` to the domain entity `Chunk` dataclass so `SqlAlchemyChunkRepository._to_domain` does not fail when hydrating ORM models.
+  - Added `get_unembedded_chunks` and `save_embeddings` to `ChunkRepository` port and implemented them in `SqlAlchemyChunkRepository`, deserializing pgvector/NumPy arrays to pure Python `list[float]` at the repository boundary to preserve domain layer isolation.
+  - Relocated migration script `0002_add_chunk_embedding.py` into `backend/infrastructure/db/migrations/versions/` so Alembic automatically discovers and applies it (`alembic upgrade head`).
+  - Restored `backend/infrastructure/vectorstore` directory structure and added `PgVectorStore`.
+  - Enforced 768-dimension consistency across all vector representations: `OpenAIAdapter` (`text-embedding-3-small` with `dimensions=768`), `OllamaAdapter` (`nomic-embed-text`), `StubLlmAdapter` (`[0.0] * 768`), `models.py` (`Vector(768)`), and `Settings.embedding_dim`.
+  - Composed `EmbedChunksUseCase` into `IngestPipelineUseCase`, transitioning documents to `IngestionStatusEnum.READY` only upon successful embedding persistence.
+  - Updated dependencies in `backend/requirements.in` (`openai`, `ollama`), compiled `backend/requirements.txt` via `pip-compile`, and validated with `pip-audit` (0 known vulnerabilities). All 50 tests passing (45 passed, 5 expected xfailed approval gates) and ruff lint clean.
+- **CI pgvector Extension Initialization on Fresh Test Databases**:
+  - In CI runner containers where tests run against fresh empty PostgreSQL databases without running Alembic migrations first, `Base.metadata.create_all(engine)` in `test_document_repository.py` failed with `psycopg2.errors.UndefinedObject: type "vector" does not exist`.
+  - Added a SQLAlchemy `before_create` DDL listener on `Base.metadata` in `backend/infrastructure/db/models.py` (`DDL("CREATE EXTENSION IF NOT EXISTS vector;").execute_if(dialect="postgresql")`) so any call to `create_all` automatically activates the vector extension on PostgreSQL.
+  - Also explicitly added extension initialization to the `db_session` fixture in `backend/tests/test_document_repository.py`.
 
