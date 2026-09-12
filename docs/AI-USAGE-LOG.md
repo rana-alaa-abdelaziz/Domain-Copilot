@@ -59,4 +59,28 @@ accepted.
   - In CI runner containers where tests run against fresh empty PostgreSQL databases without running Alembic migrations first, `Base.metadata.create_all(engine)` in `test_document_repository.py` failed with `psycopg2.errors.UndefinedObject: type "vector" does not exist`.
   - Added a SQLAlchemy `before_create` DDL listener on `Base.metadata` in `backend/infrastructure/db/models.py` (`DDL("CREATE EXTENSION IF NOT EXISTS vector;").execute_if(dialect="postgresql")`) so any call to `create_all` automatically activates the vector extension on PostgreSQL.
   - Also explicitly added extension initialization to the `db_session` fixture in `backend/tests/test_document_repository.py`.
+- **Test Database Isolation & Corpus-Wipe Bug Resolution**:
+  - Identified the root cause of the corpus-wipe bug: test fixtures in `backend/tests/test_document_repository.py` and `backend/tests/test_ingest_pipeline.py` ran teardown deletes against `DATABASE_URL` (the active dev database `domain_copilot`), destroying all ingested documents and chunks whenever pytest was executed.
+  - Resolved this strictly at the database boundary rather than narrowing fixture DELETE clauses: introduced `TEST_DATABASE_URL` pointing to an isolated test database `domain_copilot_test` in `.env` and `.env.example`.
+  - Updated repository and pipeline test fixtures to source `TEST_DATABASE_URL`, guaranteeing that automated tests never touch development or production data.
+- **FR-2 Hybrid Retrieval Implementation & Verification**:
+  - Created `backend/domain/entities/citation.py` (`Citation` dataclass with `chunk_id`, `doc_id`, `content`, `page`, `standard_id`, `fused_score`, `dense_rank`, `keyword_rank`).
+  - Created `backend/domain/ports/keyword_search.py` (`KeywordSearchPort`) and exported it in `backend/domain/ports/__init__.py`.
+  - Implemented Reciprocal Rank Fusion (RRF) in `backend/domain/services/retrieval_fusion.py` using deterministic Python arithmetic (`RRF_K = 60`), strictly preserving domain boundary rules.
+  - Implemented `backend/application/use_cases/hybrid_retrieve.py` (`HybridRetrieveUseCase`) orchestrating dense vector query and PostgreSQL keyword search with over-fetching (`DEFAULT_OVER_FETCH_MULTIPLIER = 4`) and RRF fusion. Disentangled an accidental swap where test logic had been placed in the use case file.
+  - Implemented `backend/infrastructure/vectorstore/pg_keyword_search.py` (`PgKeywordSearch`) querying `search_vector @@ websearch_to_tsquery('english', :query_text)` and normalizing UUID keys to strings.
+  - Corrected `PgVectorStore.query` in `backend/infrastructure/vectorstore/pgvector_store.py`: added `str` UUID casting and refined the distance filter `(embedding <=> CAST(:query_vector AS vector)) < 1.0` to filter out orthogonal, negative, and NaN distances cleanly.
+  - Created Alembic migration `0003_add_chunk_tsvector.py` adding `search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED` and a GIN index `ix_chunk_search_vector`. Tested reversible schema migration via `alembic downgrade -1` and `alembic upgrade head`.
+  - Created unit tests `backend/tests/test_retrieval_fusion.py` (5 tests) and integration tests `backend/tests/test_hybrid_retrieve.py` (3 tests targeting `TEST_DATABASE_URL`).
+- **Corpus Re-Ingestion & Verification**:
+  - Implemented `scripts/run_full_ingestion.py` and re-ingested the full 30-document standards corpus into `domain_copilot` using local Ollama (`nomic-embed-text`), populating 30 documents, 497 chunks, and 497 embeddings. Verified idempotency (0 new rows on re-run).
+  - Verified NASSCOM PDF extraction: 0 chunks contained the bare `QG-03` header, and standard ID `SSC/N0506` was correctly extracted.
+  - Ran full test suite (62 items: 57 passed, 5 xfailed) and confirmed dev DB row counts remained at exactly 30 documents and 497 chunks post-test.
+- **CI Test Database Provisioning and TSVECTOR ORM Model Alignment**:
+  - In GitHub Actions CI runner environments, tests failed with `FATAL: database "domain_copilot_test" does not exist`. The PostgreSQL service container was initialized with `POSTGRES_DB: domain_copilot`, while `ci.yml` only set `DATABASE_URL` (using dynamic port `${{ job.services.postgres.ports[5432] }}`) without creating `domain_copilot_test` or setting `TEST_DATABASE_URL`.
+  - Added a `Create test database` step in `.github/workflows/ci.yml` to run `CREATE DATABASE domain_copilot_test;` on the CI PostgreSQL instance, and explicitly set `TEST_DATABASE_URL` in the `Tests` step.
+  - Created `backend/tests/db_test_utils.py` providing `get_test_db_url()` and `ensure_test_db_exists(db_url)`: derives the test database from `DATABASE_URL` when `TEST_DATABASE_URL` is omitted, and self-heals by connecting to any accessible maintenance database (`postgres`, `domain_copilot`, or `template1`) to auto-create `domain_copilot_test` if missing.
+  - Added `search_vector = Column(TSVECTOR, Computed("to_tsvector('english', content)", persisted=True))` and `Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin")` to `Chunk` in `backend/infrastructure/db/models.py`. This ensures fresh test databases constructed via `Base.metadata.create_all(engine)` contain the stored `search_vector` column and GIN index required by `PgKeywordSearch`.
+
+
 

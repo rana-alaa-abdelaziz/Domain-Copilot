@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 
 from backend.domain.ports.chunk_repository import ChunkRepository
 from backend.domain.ports.document_repository import DocumentRepository
+from backend.domain.ports.keyword_search import KeywordSearchPort
 
 
 class LlmProvider(ABC):
@@ -41,7 +42,9 @@ class VectorStore(ABC):
 __all__ = [
     "ChunkRepository",
     "DocumentRepository",
+    "KeywordSearchPort",
     "LlmProvider",
     "VectorStore",
 ]
+
 

@@ -11,16 +11,18 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     DDL,
     Column,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     event,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import declarative_base, relationship
 
 # Must match backend/infrastructure/db/migrations/versions/0002_add_chunk_embedding.py
@@ -97,9 +99,15 @@ class Chunk(Base):
     page = Column(String, nullable=True)                # page number or clause/section reference
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     embedding = Column(Vector(EMBEDDING_DIM), nullable=True)  # null until EmbedChunksUseCase runs
+    search_vector = Column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+        nullable=True,
+    )
 
     document = relationship("Document", back_populates="chunks")
 
     __table_args__ = (
         UniqueConstraint("doc_id", "chunk_index", name="uq_chunk_doc_order"),
+        Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin"),
     )
