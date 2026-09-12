@@ -11,3 +11,4 @@ sqlalchemy
 PyMuPDF==1.24.10
 openai
 ollama
+python-docx
