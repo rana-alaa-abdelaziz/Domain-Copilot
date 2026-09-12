@@ -10,8 +10,13 @@ from datetime import datetime, timezone
 from backend.domain.entities.chunk import Chunk
 
 MAX_CHUNK_CHARS = 1500
-_STANDARD_ID_PATTERN = re.compile(r"\b[A-Z]{2,5}[-.][0-9]+(?:\.[0-9]+)*\b")
-
+_STANDARD_ID_PATTERN = re.compile(
+    r"\b(?:STD|RFC|ISO(?:/IEC)?|IEEE|NIST|ABET)[-. ][0-9]+(?:\.[0-9]+)*\b"  # Standards with numeric codes (includes RFC)
+    r"|\bISO/IEC\d+\b"                                                      # ISO/IEC27001 style
+    r"|\b(?:BS|EN)/\d+\b"                                                   # BS/7799, EN/12345
+    r"|\b[A-Z]{3,4}/[NQ]\d{4}\b",                                           # NSQF / NASSCOM competency units
+    re.IGNORECASE,
+)
 
 def chunk_sections(doc_id: str, sections: list[dict]) -> list[Chunk]:
     chunks: list[Chunk] = []
