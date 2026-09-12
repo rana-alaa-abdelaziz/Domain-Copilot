@@ -17,3 +17,4 @@ class Chunk:
     created_at: datetime
     standard_id: str | None = None
     hierarchy_path: str | None = None
+    embedding: list[float] | None = None

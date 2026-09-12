@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Column,
     DateTime,
@@ -19,6 +20,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
+
+# Must match backend/infrastructure/db/migrations/versions/0002_add_chunk_embedding.py
+EMBEDDING_DIM = 768
 
 Base = declarative_base()
 
@@ -85,6 +89,7 @@ class Chunk(Base):
     hierarchy_path = Column(String, nullable=True)      # e.g. "framework > competency > indicator"
     page = Column(String, nullable=True)                # page number or clause/section reference
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    embedding = Column(Vector(EMBEDDING_DIM), nullable=True)  # null until EmbedChunksUseCase runs
 
     document = relationship("Document", back_populates="chunks")
 
