@@ -1,3 +1,5 @@
-﻿# System Design
-
-<!-- TODO -->
+﻿| Target Component | Implemented? | Why Deferred | Interim Mitigation | Effort/Cost to Close |
+|---|---|---|---|---|
+| Full groundedness evaluation (generated answer checked against citations) | No | No answer-generation/agent use case exists yet — only retrieval is built | Retrieval-level proxy: check whether the top-ranked chunk itself contains expected keywords (scripts/eval.py) | ~2h once an answer-generation use case exists |
+| Indirect prompt-injection resistance testing | No | Requires a generation step that reads chunk content into a prompt — none exists yet | Direct (query-level) injection cases only, in eval/golden_set.yaml (q23, q24) | ~1h to add indirect cases once agents/generation exist |
+| Ambiguous-query detection at retrieval time | No | Retrieval can only score relevance, not judge whether a query itself is answerable/specific enough (see q21 in EVALUATION.md) | Documented as an accepted limitation; refusal relies on evidence scoring, not query-intent classification | Requires an agent/LLM-based query classifier — not scoped for this cycle |

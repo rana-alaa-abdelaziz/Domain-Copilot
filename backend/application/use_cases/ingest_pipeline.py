@@ -41,8 +41,16 @@ class IngestPipelineUseCase:
         self._chunk = chunk_document_use_case
         self._embed = embed_chunks_use_case
 
-    def execute(self, file_path: Path, source: str, version: str) -> PipelineResult:
-        ingestion_result = self._ingest.execute(file_path, source, version)
+    def execute(
+        self,
+        file_path: Path,
+        source: str,
+        version: str,
+        doc_category: str | None = None,
+    ) -> PipelineResult:
+        ingestion_result = self._ingest.execute(
+            file_path, source, version, doc_category=doc_category
+        )
 
         if ingestion_result.was_skipped:
             return PipelineResult(ingestion=ingestion_result, chunking=None, embedding=None)

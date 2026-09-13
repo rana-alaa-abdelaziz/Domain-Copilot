@@ -63,7 +63,13 @@ class IngestDocumentUseCase:
 
             self._hash_fn = compute_file_hash
 
-    def execute(self, file_path: Path, source: str, version: str) -> IngestionResult:
+    def execute(
+        self,
+        file_path: Path,
+        source: str,
+        version: str,
+        doc_category: str | None = None,
+    ) -> IngestionResult:
         file_hash = self._hash_fn(file_path)
 
         existing = self._repository.get_by_hash(file_hash)
@@ -83,6 +89,7 @@ class IngestDocumentUseCase:
             source=source,
             version=version,
             hash=file_hash,
+            doc_category=doc_category,
             created_at=now,
             updated_at=now,
         )

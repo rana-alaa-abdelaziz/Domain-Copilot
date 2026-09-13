@@ -200,3 +200,77 @@ def test_hybrid_retrieve_returns_no_evidence_for_nonsense_query(db_session):
 
     assert result.has_evidence is False
     assert len(result.citations) == 0
+
+
+def test_hybrid_retrieve_filters_by_doc_category(db_session):
+    """
+    Two documents, same content pattern, different doc_category. A query
+    that would match both must only return chunks from the requested
+    category — this is the actual behavior FR-2's metadata filtering
+    enhancement adds; the three tests above only confirm the JOIN doesn't
+    break existing unfiltered behavior.
+    """
+    vec = [1.0] + [0.0] * 767
+
+    requirement_doc_id = str(uuid.uuid4())
+    reference_doc_id = str(uuid.uuid4())
+    db_session.add_all([
+        OrmDocument(
+            doc_id=requirement_doc_id,
+            source="role_requirements.pdf",
+            version="1.0",
+            hash="hash_requirement",
+            doc_category="requirement",
+            created_at=datetime.now(timezone.utc),
+        ),
+        OrmDocument(
+            doc_id=reference_doc_id,
+            source="reference_curriculum.pdf",
+            version="1.0",
+            hash="hash_reference",
+            doc_category="reference_curriculum",
+            created_at=datetime.now(timezone.utc),
+        ),
+    ])
+
+    chunk_requirement = OrmChunk(
+        chunk_id=str(uuid.uuid4()),
+        doc_id=requirement_doc_id,
+        content="Backend developers must demonstrate REST API design competency",
+        chunk_index=0,
+        page=1,
+        embedding=vec,
+        created_at=datetime.now(timezone.utc),
+    )
+    chunk_reference = OrmChunk(
+        chunk_id=str(uuid.uuid4()),
+        doc_id=reference_doc_id,
+        content="This syllabus teaches REST API design competency over six weeks",
+        chunk_index=0,
+        page=1,
+        embedding=vec,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add_all([chunk_requirement, chunk_reference])
+    db_session.commit()
+
+    query = "REST API design competency"
+    llm = StubQueryLlmProvider(query_mapping={query: vec})
+    use_case = HybridRetrieveUseCase(
+        llm_provider=llm,
+        vector_store=PgVectorStore(db_session),
+        keyword_search=PgKeywordSearch(db_session),
+    )
+
+    result = use_case.execute(query=query, top_k=5, doc_category="requirement")
+
+    assert result.has_evidence is True
+    found_ids = {c.chunk_id for c in result.citations}
+    assert chunk_requirement.chunk_id in found_ids
+    assert chunk_reference.chunk_id not in found_ids
+
+    # Sanity check: without the filter, both would have been candidates
+    unfiltered = use_case.execute(query=query, top_k=5)
+    unfiltered_ids = {c.chunk_id for c in unfiltered.citations}
+    assert chunk_requirement.chunk_id in unfiltered_ids
+    assert chunk_reference.chunk_id in unfiltered_ids

@@ -40,12 +40,18 @@ class HybridRetrieveUseCase:
         self._vector_store = vector_store
         self._keyword_search = keyword_search
 
-    def execute(self, query: str, top_k: int = 5) -> RetrievalResult:
+    def execute(
+        self, query: str, top_k: int = 5, doc_category: str | None = None
+    ) -> RetrievalResult:
         fetch_k = top_k * DEFAULT_OVER_FETCH_MULTIPLIER
 
         query_vector = self._llm_provider.embed(query)
-        dense_results = self._vector_store.query(query_vector, top_k=fetch_k)
-        keyword_results = self._keyword_search.search(query, top_k=fetch_k)
+        dense_results = self._vector_store.query(
+            query_vector, top_k=fetch_k, doc_category=doc_category
+        )
+        keyword_results = self._keyword_search.search(
+            query, top_k=fetch_k, doc_category=doc_category
+        )
 
         citations = reciprocal_rank_fusion(dense_results, keyword_results, top_k=top_k)
 
