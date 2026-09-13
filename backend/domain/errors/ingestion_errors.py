@@ -18,4 +18,8 @@ class ChunkingError(DomainError):
 
 class EmbeddingError(DomainError):
     """Raised when the LLM provider fails to produce an embedding for a
-    chunk (provider error, rate limit, malformed response)."""
+    chunk (provider error, rate limit, malformed response)."""
+
+# 7.MaxIterationsExceededError
+# 7.AgentTimeoutError
+# 8.ApprovalRequiredError (PublicationBlockedError may already cover this — check before adding a duplicate)

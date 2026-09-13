@@ -83,4 +83,63 @@ accepted.
   - Added `search_vector = Column(TSVECTOR, Computed("to_tsvector('english', content)", persisted=True))` and `Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin")` to `Chunk` in `backend/infrastructure/db/models.py`. This ensures fresh test databases constructed via `Base.metadata.create_all(engine)` contain the stored `search_vector` column and GIN index required by `PgKeywordSearch`.
 
 
-
+#=====================================
+## 2026-09-13 — Gap analysis design: corpus categorization assumption caught and corrected
+
+**Delegated to AI:** Designing the gap-analysis comparison structure for
+the Standards Mapper agent — specifically, what the "gap" is measured
+between.
+
+**What the AI got wrong:** Proposed a binary document categorization
+(`requirement` vs `curriculum`) to split the 30-document corpus into
+"what the role needs" vs "what's currently taught," treating all 18
+synthetic files as legitimate stand-ins for an existing curriculum
+without ever checking their actual content — only their filenames and
+page counts, from an earlier corpus-assembly session.
+
+**How it was caught:** I (not the AI) asked directly whether the 18
+synthetic files could really act as real course content for the target
+role. The AI had not verified this and, on checking, found the binary
+split was wrong: of the 18 files, only the 7 `syllabus_*.docx` files are
+genuinely curriculum content. `standard_backend_competency_framework.pdf`
+and `standard_onboarding_curriculum.pdf` are actually requirement-side
+documents despite their filenames. The six `rubric_*.docx` files and
+three `standard_*_method/design/writing.pdf` files are neither — they're
+assessment criteria and agent-methodology guidance, a third category the
+original design had no place for.
+
+**How it was corrected:** Re-categorized all 18 files by actually
+extracting and reading their content (not just filenames), producing a
+three-way split (`requirement` / `curriculum` / `methodology`) documented
+in `corpus/manifest.md`.
+
+**Further correction (my own idea, reviewed by the AI):** Rather than
+relying on synthetic corpus documents to represent "what a learner
+currently knows" at all, changed the design so the user supplies their
+own current subject knowledge directly (target role + known
+subjects/courses as two inputs). This removes the need for a
+`curriculum` category entirely and avoids treating placeholder synthetic
+content as if it represented a real, existing curriculum — see design
+discussion below for the grounding implications this introduces and how
+they're handled.
+
+**Lesson:** Corpus content should be read, not assumed, before it's
+assigned a semantic role in agent logic — a plausible-sounding filename
+is not evidence of what a document actually contains.
+
+## 2026-09-13 — Step 6 (FR-2 Metadata Filtering) Verification & Migration Collision Fix
+
+**What the AI got wrong:**
+- During the implementation of Step 6 (document category metadata filtering), an AI edit accidentally overwrote `backend/infrastructure/db/migrations/versions/0003_add_chunk_tsvector.py` in place with the `doc_category` migration (labelled revision `0003` revising `0002`). This obliterated the migration for the `chunk.search_vector` generated column and GIN index, which is critical for full-text search. Furthermore, because the database was already at revision `0003`, `alembic upgrade head` was a silent no-op.
+
+**How it was caught:**
+- During Step 6 verification Check 1 (`alembic upgrade head` and downgrade checks), git diff revealed `0003_add_chunk_tsvector.py` had been overwritten rather than a new migration file being created.
+
+**How it was corrected:**
+- Restored `0003_add_chunk_tsvector.py` to its exact commit `6830a13` state (`revision = "0003"`, `down_revision = "0002"`).
+- Created `0004_add_document_category.py` (`revision = "0004"`, `down_revision = "0003"`).
+- Verified `alembic upgrade head` cleanly applies `0004` (creating `doc_category` column and `ix_document_doc_category` index), `alembic downgrade -1` cleanly reverses `0004`, and `alembic upgrade head` cleanly re-applies it.
+- Verified SQL injection safety of bound `:doc_category` parameter in both `PgVectorStore` and `PgKeywordSearch`.
+- Verified architecture boundaries (34/34 passed) and full test suite (77 passed, 5 expected xfails).
+- Verified backward compatibility across all call sites, including `scripts/eval.py` and `scripts/run_full_ingestion.py`.
+

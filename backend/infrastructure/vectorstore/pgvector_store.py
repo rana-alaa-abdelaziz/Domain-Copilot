@@ -36,7 +36,9 @@ class PgVectorStore(VectorStore):
         )
         self._session.commit()
 
-    def query(self, vector: list[float], top_k: int = 5) -> list[dict]:
+    def query(
+        self, vector: list[float], top_k: int = 5, doc_category: str | None = None
+    ) -> list[dict]:
         # Cosine distance (<=>) via pgvector; lower distance = more similar,
         # so score is reported as 1 - distance to read as "higher is better"
         # for consistency with how a fusion step will combine this with
@@ -57,23 +59,33 @@ class PgVectorStore(VectorStore):
         # this, real matches well above — recalibrate from real numbers
         # as the corpus grows, per FR-3's "record real numbers" guidance.
         MIN_SIMILARITY = 0.3
+
+        category_filter_sql = ""
+        params = {
+            "query_vector": str(vector),
+            "top_k": top_k,
+            "min_similarity": MIN_SIMILARITY,
+        }
+        if doc_category is not None:
+            category_filter_sql = "AND document.doc_category = :doc_category"
+            params["doc_category"] = doc_category
+
         rows = self._session.execute(
             text(
-                """
-                SELECT chunk_id, doc_id, content, page, standard_id,
-                       1 - (embedding <=> CAST(:query_vector AS vector)) AS score
+                f"""
+                SELECT chunk.chunk_id, chunk.doc_id, chunk.content, chunk.page,
+                       chunk.standard_id,
+                       1 - (chunk.embedding <=> CAST(:query_vector AS vector)) AS score
                 FROM chunk
-                WHERE embedding IS NOT NULL
-                  AND 1 - (embedding <=> CAST(:query_vector AS vector)) >= :min_similarity
-                ORDER BY embedding <=> CAST(:query_vector AS vector)
+                JOIN document ON document.doc_id = chunk.doc_id
+                WHERE chunk.embedding IS NOT NULL
+                  AND 1 - (chunk.embedding <=> CAST(:query_vector AS vector)) >= :min_similarity
+                  {category_filter_sql}
+                ORDER BY chunk.embedding <=> CAST(:query_vector AS vector)
                 LIMIT :top_k
                 """
             ),
-            {
-                "query_vector": str(vector),
-                "top_k": top_k,
-                "min_similarity": MIN_SIMILARITY,
-            },
+            params,
         ).mappings().all()
         return [
             {**dict(row), "chunk_id": str(row["chunk_id"]), "doc_id": str(row["doc_id"])}

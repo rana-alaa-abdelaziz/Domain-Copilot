@@ -36,7 +36,12 @@ class VectorStore(ABC):
     def upsert(self, ids: list[str], vectors: list[list[float]], metadata: list[dict]) -> None: ...
 
     @abstractmethod
-    def query(self, vector: list[float], top_k: int = 5) -> list[dict]: ...
+    def query(
+        self, vector: list[float], top_k: int = 5, doc_category: str | None = None
+    ) -> list[dict]:
+        """doc_category: when provided, restricts results to chunks whose
+        parent document has this category. None means unfiltered."""
+        ...
 
 
 __all__ = [
@@ -47,4 +52,4 @@ __all__ = [
     "VectorStore",
 ]
 
-
+

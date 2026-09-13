@@ -31,6 +31,7 @@ class Document:
     hash: str
     created_at: datetime
     updated_at: datetime
+    doc_category: str | None = None
 
 
 @dataclass

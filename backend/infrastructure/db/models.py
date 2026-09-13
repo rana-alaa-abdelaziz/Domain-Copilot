@@ -58,6 +58,7 @@ class Document(Base):
     source = Column(String, nullable=False)            # filename or origin reference
     version = Column(String, nullable=False)
     hash = Column(String, nullable=False, unique=True)  # SHA256 — idempotency key
+    doc_category = Column(String, nullable=True)  # "requirement" | "methodology" | "reference_curriculum" | None
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 

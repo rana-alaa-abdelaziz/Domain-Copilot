@@ -61,6 +61,7 @@ class SqlAlchemyDocumentRepository(DocumentRepository):
             orm_doc.source = document.source
             orm_doc.version = document.version
             orm_doc.hash = document.hash
+            orm_doc.doc_category = document.doc_category
             orm_doc.updated_at = document.updated_at
         else:
             orm_doc = OrmDocument(
@@ -68,6 +69,7 @@ class SqlAlchemyDocumentRepository(DocumentRepository):
                 source=document.source,
                 version=document.version,
                 hash=document.hash,
+                doc_category=document.doc_category,
                 created_at=document.created_at,
                 updated_at=document.updated_at,
             )
@@ -117,6 +119,7 @@ class SqlAlchemyDocumentRepository(DocumentRepository):
             source=orm_doc.source,
             version=orm_doc.version,
             hash=orm_doc.hash,
+            doc_category=orm_doc.doc_category,
             created_at=orm_doc.created_at,
             updated_at=orm_doc.updated_at,
         )
