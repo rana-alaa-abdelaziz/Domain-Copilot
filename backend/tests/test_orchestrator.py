@@ -7,6 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from backend.application.agents.standards_mapper import StandardsMapper
+from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
+from backend.application.agents.assessment_generator import AssessmentGenerator
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
 from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
 from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
@@ -31,31 +33,44 @@ with Session(engine) as session:
         keyword_search=keyword_search,
     )
 
-    # 2. Initialize pure business logic agent
+    # 2. Initialize pure business logic agents
     standards_mapper = StandardsMapper(
         retrieve_use_case=retrieve_uc,
         llm_provider=llm_provider,
     )
+    outline_generator = ModuleOutlineGenerator(
+        retrieve_use_case=retrieve_uc,
+        llm_provider=llm_provider,
+    )
+    assessment_generator = AssessmentGenerator(
+        retrieve_use_case=retrieve_uc,
+        llm_provider=llm_provider,
+    )
 
-    # 3. Compile the LangGraph orchestrator app
-    app = create_copilot_graph(standards_mapper)
+    # 3. Compile the LangGraph orchestrator app with all agents
+    app = create_copilot_graph(standards_mapper, outline_generator, assessment_generator)
 
     # 4. Set initial graph state
     initial_state = {
         "target_role": "Junior Backend Developer",
         "user_reported_subjects": ["REST API Design", "Git Version Control"],
-        "competency_gap_report": None
+        "competency_gap_report": None,
+        "module_outline_report": None,
+        "assessment_report": None
     }
 
     print("Invoking LangGraph orchestrator state machine...")
     final_state = app.invoke(initial_state)
 
     report = final_state["competency_gap_report"]
+    outline_report = final_state["module_outline_report"]
+    assessment_report = final_state["assessment_report"]
+
     print("\nGraph execution complete!")
     print(f"Target Role: {report.target_role}")
     print(f"Total Competencies Evaluated: {len(report.gaps)}")
-    print(f"Covered Competencies: {len(report.covered_competencies)}")
-    print(f"Unverified Gaps: {len(report.unverified_competencies)}")
+    print(f"Modules Generated: {len(outline_report.modules) if outline_report else 0}")
+    print(f"Assessment Items Generated: {len(assessment_report.items) if assessment_report else 0}")
 
     assert report is not None, "Graph failed to return a competency gap report"
     assert len(report.gaps) > 0, "Expected evaluated gaps in report"

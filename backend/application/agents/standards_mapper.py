@@ -176,7 +176,7 @@ class StandardsMapper:
 
         for skill in extracted_skills:
             skill_lower = skill.lower()
-            skill_tokens = {w for w in skill_lower.split() if len(w) > 3 and w not in GENERIC_STOPWORDS}
+            skill_tokens = {w for w in skill_lower.split() if len(w) >= 2 and w not in GENERIC_STOPWORDS}
             
             matched_subject = self._find_matching_subject(skill, user_reported_subjects)
             
