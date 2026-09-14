@@ -2,7 +2,10 @@
 Permanent verification script for PostgreSQL state persistence and session recovery.
 """
 import os
+import urllib.error
+import urllib.request
 
+import pytest
 from langgraph.checkpoint.postgres import PostgresSaver
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -19,6 +22,17 @@ from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
 from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 
 
+def is_ollama_running(url: str) -> bool:
+    try:
+        urllib.request.urlopen(url, timeout=1.0)
+        return True
+    except urllib.error.URLError:
+        return False
+
+@pytest.mark.skipif(
+    not is_ollama_running(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")),
+    reason="Ollama is not running"
+)
 def test_postgres_persistence():
     db_url = os.getenv(
         "DATABASE_URL",
