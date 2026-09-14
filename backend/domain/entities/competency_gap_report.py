@@ -3,7 +3,8 @@ Domain entity representing a structured Competency Gap Report.
 Zero dependencies on external libraries or frameworks (Clean Architecture).
 """
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
+
 from backend.domain.entities.assessment_item import AssessmentItemReport
 
 CoverageSource = Literal["corpus_citation", "model_inference", "unverified"]
@@ -33,7 +34,7 @@ class CompetencyGapReport:
     target_role: str
     user_reported_subjects: list[str] = field(default_factory=list)
     gaps: list[CompetencyGap] = field(default_factory=list)
-    assessment_report: Optional[AssessmentItemReport] = None
+    assessment_report: AssessmentItemReport | None = None
 
     @property
     def critical_gaps(self) -> list[CompetencyGap]:

@@ -10,12 +10,12 @@ if str(root_dir) not in sys.path:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
-from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
-from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
-from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
 from backend.application.agents.standards_mapper import StandardsMapper
+from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
 from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
+from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
+from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 
 db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/domain_copilot")
 engine = create_engine(db_url)
@@ -54,7 +54,7 @@ with Session(engine) as session:
     final_state = app.invoke(initial_state)
 
     report = final_state["competency_gap_report"]
-    print(f"\nGraph execution complete!")
+    print("\nGraph execution complete!")
     print(f"Target Role: {report.target_role}")
     print(f"Total Competencies Evaluated: {len(report.gaps)}")
     print(f"Covered Competencies: {len(report.covered_competencies)}")

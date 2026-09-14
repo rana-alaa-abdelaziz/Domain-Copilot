@@ -1,7 +1,10 @@
 ﻿from unittest.mock import MagicMock
 
 from backend.application.agents.standards_mapper import StandardsMapper
-from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase, RetrievalResult
+from backend.application.use_cases.hybrid_retrieve import (
+    HybridRetrieveUseCase,
+    RetrievalResult,
+)
 from backend.domain.entities.citation import Citation
 from backend.domain.ports import LlmProvider
 

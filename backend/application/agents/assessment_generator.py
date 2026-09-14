@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from typing import List
-from backend.domain.entities.competency_gap_report import CompetencyGapReport
-from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport
+
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport
+from backend.domain.entities.competency_gap_report import CompetencyGapReport
 from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+
 
 class AssessmentGenerator:
     """
@@ -35,7 +36,7 @@ class AssessmentGenerator:
             )
 
     def generate_items(self, report: CompetencyGapReport) -> AssessmentItemReport:
-        items: List[AssessmentItem] = []
+        items: list[AssessmentItem] = []
         
         if not report.unverified_competencies:
             return AssessmentItemReport(target_role=report.target_role, items=[])
@@ -56,26 +57,22 @@ class AssessmentGenerator:
                 raw_response = self.llm.complete(prompt=prompt, options={"temperature": 0.0})
                 
                 cleaned_response = raw_response.strip()
-                if cleaned_response.startswith("```json"):
-                    cleaned_response = cleaned_response[7:]
-                if cleaned_response.endswith("```"):
-                    cleaned_response = cleaned_response[:-3]
+                cleaned_response = cleaned_response.removeprefix("```json")
+                cleaned_response = cleaned_response.removesuffix("```")
                 cleaned_response = cleaned_response.strip()
 
                 data = json.loads(cleaned_response)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     # Single self-correction retry attempt for LLM JSON drift
                     fix_prompt = f"Your previous response was not valid JSON matching the required schema. Fix it and output ONLY valid JSON for competency '{gap.competency}':\n{raw_response}"
                     retry_response = self.llm.complete(prompt=fix_prompt, options={"temperature": 0.0})
                     cleaned_retry = retry_response.strip()
-                    if cleaned_retry.startswith("```json"):
-                        cleaned_retry = cleaned_retry[7:]
-                    if cleaned_retry.endswith("```"):
-                        cleaned_retry = cleaned_retry[:-3]
+                    cleaned_retry = cleaned_retry.removeprefix("```json")
+                    cleaned_retry = cleaned_retry.removesuffix("```")
                     cleaned_retry = cleaned_retry.strip()
                     data = json.loads(cleaned_retry)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     # Fully dynamic fallback derived strictly from retrieved corpus context (Zero Hardcoding)
                     fallback_question = (
                         f"Based on the corpus documentation for {report.target_role}, "
@@ -90,7 +87,7 @@ class AssessmentGenerator:
                         question_type="short_answer",
                         options=[],
                         correct_answer=clean_fallback_answer,
-                        rationale=f"Generated dynamically from corpus context due to parser exception: {str(e)}",
+                        rationale=f"Generated dynamically from corpus context due to parser exception: {e!s}",
                         difficulty="intermediate"
                     ))
                     continue

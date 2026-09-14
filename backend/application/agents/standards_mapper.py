@@ -5,6 +5,7 @@ Guarantees zero cross-domain citation contamination (e.g., SQL skills cannot mat
 Clean Architecture boundary: Plain Python class with ZERO framework, SDK,
 or LangGraph imports.
 """
+import contextlib
 import json
 import re
 from pathlib import Path
@@ -51,21 +52,17 @@ class StandardsMapper:
     def _parse_skills_list(text: str) -> list[str]:
         """Extracts list of skill strings from raw LLM text."""
         text = text.strip()
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             parsed = json.loads(text)
             if isinstance(parsed, list):
                 return [str(s).strip() for s in parsed if str(s).strip()]
-        except Exception:
-            pass
 
         matches = re.findall(r"```(?:json)?\s*(\[.*?\])\s*```", text, re.DOTALL)
         for m in matches:
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 parsed = json.loads(m)
                 if isinstance(parsed, list):
                     return [str(s).strip() for s in parsed if str(s).strip()]
-            except Exception:
-                pass
 
         raw_list = re.search(r"\[(.*?)\]", text, re.DOTALL)
         if raw_list:

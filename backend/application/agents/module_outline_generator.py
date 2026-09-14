@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from typing import List
-from backend.domain.entities.competency_gap_report import CompetencyGapReport
-from backend.domain.entities.module_outline import ModuleOutlineReport, LearningModule
+
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.domain.entities.competency_gap_report import CompetencyGapReport
+from backend.domain.entities.module_outline import LearningModule, ModuleOutlineReport
 from backend.domain.ports import LlmProvider
+
 
 class ModuleOutlineGenerator:
     """
@@ -59,7 +60,7 @@ class ModuleOutlineGenerator:
                 for m in data.get("modules", [])
             ]
             return ModuleOutlineReport(target_role=gap_report.target_role, modules=modules)
-        except Exception:
+        except json.JSONDecodeError:
             # Dynamic fallback mapping each unverified competency directly to its own module structure
             modules = [
                 LearningModule(

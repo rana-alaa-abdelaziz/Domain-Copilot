@@ -1,18 +1,21 @@
-from typing import TypedDict, List, Optional
-from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+from langgraph.graph import END, StateGraph
+
+from backend.application.agents.assessment_generator import AssessmentGenerator
+from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
+from backend.application.agents.standards_mapper import StandardsMapper
+from backend.domain.entities.assessment_item import AssessmentItemReport
 from backend.domain.entities.competency_gap_report import CompetencyGapReport
 from backend.domain.entities.module_outline import ModuleOutlineReport
-from backend.domain.entities.assessment_item import AssessmentItemReport
-from backend.application.agents.standards_mapper import StandardsMapper
-from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
-from backend.application.agents.assessment_generator import AssessmentGenerator
+
 
 class CopilotState(TypedDict):
     target_role: str
-    user_reported_subjects: List[str]
-    competency_gap_report: Optional[CompetencyGapReport]
-    module_outline_report: Optional[ModuleOutlineReport]
-    assessment_report: Optional[AssessmentItemReport]
+    user_reported_subjects: list[str]
+    competency_gap_report: CompetencyGapReport | None
+    module_outline_report: ModuleOutlineReport | None
+    assessment_report: AssessmentItemReport | None
 
 def create_copilot_graph(
     standards_mapper: StandardsMapper, 
