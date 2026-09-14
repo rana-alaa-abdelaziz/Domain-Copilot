@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AssessmentItem(BaseModel):
@@ -29,6 +29,20 @@ class AssessmentItem(BaseModel):
         description="Chunk IDs the retrieved evidence for this item came from — "
         "traceability back to source material, required for grounding.",
     )
+
+    @model_validator(mode="after")
+    def validate_options_and_answer(self) -> "AssessmentItem":
+        """Quality Gate: Ensures multiple-choice items have valid options and a matching correct answer."""
+        if self.question_type == "multiple_choice":
+            if not self.options or len(self.options) < 2:
+                raise ValueError("Multiple-choice assessment items must have at least 2 options.")
+            if self.correct_answer not in self.options:
+                raise ValueError(
+                    f"Correct answer '{self.correct_answer}' must be present in the provided options: {self.options}"
+                )
+        if not self.question_text or len(self.question_text.strip()) < 5:
+            raise ValueError("Question text must be at least 5 characters long.")
+        return self
 
 
 class AssessmentItemReport(BaseModel):
