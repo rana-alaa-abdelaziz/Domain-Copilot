@@ -55,9 +55,7 @@ class ModuleOutlineGenerator:
         prompt = prompt.replace("{gaps_json}", json.dumps(gaps_data, indent=2))
 
         try:
-            raw_response = self.llm.complete(
-                prompt=prompt, options={"temperature": 0.0}
-            )
+            raw_response = self.llm.complete(prompt=prompt)
             cleaned = (
                 raw_response.strip().replace("```json", "").replace("```", "").strip()
             )

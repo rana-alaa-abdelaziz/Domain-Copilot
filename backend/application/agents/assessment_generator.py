@@ -4,7 +4,7 @@ from pathlib import Path
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
 from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport
 from backend.domain.entities.competency_gap_report import CompetencyGapReport
-from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+from backend.domain.ports import LlmProvider
 
 
 class AssessmentGenerator:
@@ -13,7 +13,7 @@ class AssessmentGenerator:
     """
 
     def __init__(
-        self, retrieve_use_case: HybridRetrieveUseCase, llm_provider: OllamaAdapter
+        self, retrieve_use_case: HybridRetrieveUseCase, llm_provider: LlmProvider
     ):
         self.retrieve_uc = retrieve_use_case
         self.llm = llm_provider
@@ -55,6 +55,7 @@ class AssessmentGenerator:
             query = f"{report.target_role} {gap.competency}"
             retrieval_results = self.retrieve_uc.execute(query=query, top_k=2)
             context_text = "\n".join([c.content for c in retrieval_results.citations])
+            source_chunk_ids = [c.chunk_id for c in retrieval_results.citations]
 
             prompt = self.prompt_template.format(
                 target_role=report.target_role,
@@ -65,99 +66,132 @@ class AssessmentGenerator:
                 else "Not enough information in the corpus.",
             )
 
-            try:
-                raw_response = self.llm.complete(
-                    prompt=prompt, options={"temperature": 0.0}
-                )
-
-                cleaned_response = raw_response.strip()
-                cleaned_response = cleaned_response.removeprefix("```json")
-                cleaned_response = cleaned_response.removesuffix("```")
-                cleaned_response = cleaned_response.strip()
-
-                data = json.loads(cleaned_response)
-            except Exception:  # noqa: BLE001
-                try:
-                    # Single self-correction retry attempt for LLM JSON drift
-                    fix_prompt = f"Your previous response was not valid JSON matching the required schema. Fix it and output ONLY valid JSON for competency '{gap.competency}':\n{raw_response}"
-                    retry_response = self.llm.complete(
-                        prompt=fix_prompt, options={"temperature": 0.0}
-                    )
-                    cleaned_retry = retry_response.strip()
-                    cleaned_retry = cleaned_retry.removeprefix("```json")
-                    cleaned_retry = cleaned_retry.removesuffix("```")
-                    cleaned_retry = cleaned_retry.strip()
-                    data = json.loads(cleaned_retry)
-                except Exception as e:  # noqa: BLE001
-                    # Fully dynamic fallback derived strictly from retrieved corpus context (Zero Hardcoding)
-                    fallback_question = (
-                        f"Based on the corpus documentation for {report.target_role}, "
-                        f"explain the core principles, architecture, or implementation details regarding '{gap.competency}'."
-                    )
-                    clean_fallback_answer = (
-                        context_text[:300].strip()
-                        if context_text
-                        else "Refer directly to official corpus documentation."
-                    )
-
-                    items.append(
-                        AssessmentItem(
-                            competency=gap.competency,
-                            target_role=report.target_role,
-                            question_text=fallback_question,
-                            question_type="short_answer",
-                            options=[],
-                            correct_answer=clean_fallback_answer,
-                            rationale=f"Generated dynamically from corpus context due to parser exception: {e!s}",
-                            difficulty="intermediate",
-                        )
-                    )
-                    continue
-
-            question_type = data.get("question_type", "multiple_choice")
-            
-            # Robust options parsing (handles strings, stringified lists, or native lists)
-            raw_options = data.get("options", [])
-            if isinstance(raw_options, str):
-                try:
-                    parsed_opts = json.loads(raw_options)
-                    options = parsed_opts if isinstance(parsed_opts, list) else [str(parsed_opts)]
-                except json.JSONDecodeError:
-                    options = [o.strip(" '\"") for o in raw_options.strip("[]").split(",") if o.strip(" '\"")]
-            elif isinstance(raw_options, dict):
-                options = list(raw_options.values())
-            else:
-                options = list(raw_options)
-
-            correct_answer = data.get("correct_answer", "").strip()
-
-            # Flexible validation check with fallback normalization
-            if question_type == "multiple_choice":
-                if not options:
-                    raise ValueError("Empty options list.")
-                matched_option = next(
-                    (
-                        opt
-                        for opt in options
-                        if correct_answer.lower() in opt.lower()
-                        or opt.lower() in correct_answer.lower()
-                    ),
-                    options[0],
-                )
-                correct_answer = matched_option
-
-            item = AssessmentItem(
-                competency=gap.competency,
+            item = self._generate_one_item(
+                prompt=prompt,
+                gap=gap,
                 target_role=report.target_role,
-                question_text=data.get(
-                    "question_text", f"Evaluate understanding of {gap.competency}"
-                ),
-                question_type=question_type,
-                options=options,
-                correct_answer=correct_answer,
-                rationale=data.get("rationale", "Grounded via curriculum extraction."),
-                difficulty=data.get("difficulty", "intermediate"),
+                context_text=context_text,
+                source_chunk_ids=source_chunk_ids,
             )
             items.append(item)
 
         return AssessmentItemReport(target_role=report.target_role, items=items)
+
+    def _generate_one_item(
+        self, prompt: str, gap, target_role: str, context_text: str, source_chunk_ids: list[str]
+    ) -> AssessmentItem:
+        # raw_response starts as None so the except block below can tell
+        # apart "the LLM call itself failed" (raw_response still None,
+        # nothing to self-correct) from "the LLM responded but the JSON
+        # was malformed" (raw_response holds text worth retrying against).
+        raw_response = None
+        try:
+            raw_response = self.llm.complete(prompt=prompt)
+            data = self._parse_json_response(raw_response)
+            return self._build_item(data, gap, target_role, source_chunk_ids)
+        except Exception:  # noqa: BLE001
+            if raw_response is not None:
+                try:
+                    fix_prompt = (
+                        f"Your previous response was not valid JSON matching the "
+                        f"required schema. Fix it and output ONLY valid JSON for "
+                        f"competency '{gap.competency}':\n{raw_response}"
+                    )
+                    retry_response = self.llm.complete(prompt=fix_prompt)
+                    data = self._parse_json_response(retry_response)
+                    return self._build_item(data, gap, target_role, source_chunk_ids)
+                except Exception as e:  # noqa: BLE001
+                    return self._fallback_item(gap, target_role, context_text, source_chunk_ids, e)
+            else:
+                # The LLM call itself failed (network/provider error) —
+                # nothing to self-correct against, go straight to fallback.
+                return self._fallback_item(
+                    gap, target_role, context_text, source_chunk_ids,
+                    RuntimeError("LLM call failed before any response was returned"),
+                )
+
+    @staticmethod
+    def _parse_json_response(raw_response: str) -> dict:
+        cleaned = raw_response.strip()
+        cleaned = cleaned.removeprefix("```json")
+        cleaned = cleaned.removesuffix("```")
+        cleaned = cleaned.strip()
+        return json.loads(cleaned)
+
+    def _build_item(
+        self, data: dict, gap, target_role: str, source_chunk_ids: list[str]
+    ) -> AssessmentItem:
+        question_type = data.get("question_type", "multiple_choice")
+
+        # Robust options parsing (handles strings, stringified lists, or native lists)
+        raw_options = data.get("options", [])
+        if isinstance(raw_options, str):
+            try:
+                parsed_opts = json.loads(raw_options)
+                options = parsed_opts if isinstance(parsed_opts, list) else [str(parsed_opts)]
+            except json.JSONDecodeError:
+                options = [o.strip(" '\"") for o in raw_options.strip("[]").split(",") if o.strip(" '\"")]
+        elif isinstance(raw_options, dict):
+            options = list(raw_options.values())
+        else:
+            options = list(raw_options)
+
+        correct_answer = data.get("correct_answer", "").strip()
+
+        if question_type == "multiple_choice" and not options:
+            # Previously this raised ValueError uncaught, killing the
+            # whole generate_items() loop for every remaining competency.
+            # A degraded item for just this one competency is the correct
+            # scope of failure, not the entire batch.
+            question_type = "short_answer"
+
+        if question_type == "multiple_choice":
+            matched_option = next(
+                (
+                    opt
+                    for opt in options
+                    if correct_answer.lower() in opt.lower()
+                    or opt.lower() in correct_answer.lower()
+                ),
+                options[0],
+            )
+            correct_answer = matched_option
+
+        return AssessmentItem(
+            competency=gap.competency,
+            target_role=target_role,
+            question_text=data.get(
+                "question_text", f"Evaluate understanding of {gap.competency}"
+            ),
+            question_type=question_type,
+            options=options,
+            correct_answer=correct_answer,
+            rationale=data.get("rationale", "Grounded via curriculum extraction."),
+            difficulty=data.get("difficulty", "intermediate"),
+            source_chunk_ids=source_chunk_ids,
+        )
+
+    @staticmethod
+    def _fallback_item(
+        gap, target_role: str, context_text: str, source_chunk_ids: list[str], error: Exception
+    ) -> AssessmentItem:
+        fallback_question = (
+            f"Based on the corpus documentation for {target_role}, "
+            f"explain the core principles, architecture, or implementation details regarding '{gap.competency}'."
+        )
+        clean_fallback_answer = (
+            context_text[:300].strip()
+            if context_text
+            else "Refer directly to official corpus documentation."
+        )
+        return AssessmentItem(
+            competency=gap.competency,
+            target_role=target_role,
+            question_text=fallback_question,
+            question_type="short_answer",
+            options=[],
+            correct_answer=clean_fallback_answer,
+            rationale=f"Generated dynamically from corpus context due to parser exception: {error!s}",
+            difficulty="intermediate",
+            source_chunk_ids=source_chunk_ids,
+        )
