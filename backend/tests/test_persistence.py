@@ -79,7 +79,7 @@ def test_postgres_persistence():
                 "assessment_report": None,
             }
 
-            final_state = app.invoke(initial_state, thread_config)
+            app.invoke(initial_state, thread_config)
             restored_state = app.get_state(thread_config)
 
             assert restored_state.values["competency_gap_report"] is not None, (
