@@ -13,3 +13,4 @@ openai
 ollama
 python-docx
 langgraph
+langgraph-checkpoint-postgres

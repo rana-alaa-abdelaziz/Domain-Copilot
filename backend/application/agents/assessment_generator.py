@@ -21,6 +21,9 @@ class AssessmentGenerator:
 
     def _load_prompt_template(self):
         candidate_paths = [
+            Path(__file__).resolve().parents[3]
+            / "prompts"
+            / "assessment_generator_v1.md",
             Path(__file__).resolve().parents[2]
             / "prompts"
             / "assessment_generator_v1.md",

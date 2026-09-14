@@ -21,6 +21,7 @@ class ModuleOutlineGenerator:
 
     def _load_prompt_template(self):
         candidate_paths = [
+            Path(__file__).resolve().parents[3] / "prompts" / "module_outline_v1.md",
             Path(__file__).resolve().parents[2] / "prompts" / "module_outline_v1.md",
             Path(__file__).resolve().parents[2]
             / "backend"
