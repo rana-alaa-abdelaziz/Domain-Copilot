@@ -1,9 +1,14 @@
-from typing import TypedDict
+
+
+from langgraph.checkpoint.postgres import PostgresSaver
 
 from langgraph.graph import END, StateGraph
+from typing import TypedDict
 
 from backend.application.agents.assessment_generator import AssessmentGenerator
-from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
+from backend.application.agents.module_outline_generator import (
+    ModuleOutlineGenerator,
+)
 from backend.application.agents.standards_mapper import StandardsMapper
 from backend.domain.entities import CompetencyGapReport
 from backend.domain.entities.assessment_item import AssessmentItemReport
@@ -22,6 +27,7 @@ def create_copilot_graph(
     standards_mapper: StandardsMapper,
     outline_generator: ModuleOutlineGenerator | None = None,
     assessment_generator: AssessmentGenerator | None = None,
+    checkpointer: PostgresSaver | None = None,
 ):
     workflow = StateGraph(CopilotState)
 
@@ -61,4 +67,4 @@ def create_copilot_graph(
 
     workflow.add_edge(current_node, END)
 
-    return workflow.compile()
+    return workflow.compile(checkpointer=checkpointer)
