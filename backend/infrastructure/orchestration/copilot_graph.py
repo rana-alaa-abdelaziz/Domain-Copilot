@@ -1,27 +1,16 @@
 """
 Multi-agent curriculum workflow graph: standards_mapper -> module_outline_generator
--> assessment_generator -> END.
+-> assessment_generator -> human_review -> END.
 
 FR-5 resilience controls (max-iteration breaker, per-step timeout, retry
 with backoff, graceful degradation) wrap every node here — no agent call
 in this file runs unprotected. Timeout uses ThreadPoolExecutor rather
 than signal.alarm since this must run on Windows, not just Unix.
-
-Degradation strategy differs by node, deliberately:
-- standards_mapper: falls back to raw retrieval evidence (plain RAG),
-  since it's the only step that queries directly against a user-supplied
-  role rather than consuming a prior step's structured output.
-- module_outline_generator / assessment_generator: on exhausted retries,
-  the run continues to END with that stage's report set to None and
-  `degraded=True` recorded — falling back to "raw evidence" doesn't make
-  sense for a step whose input is already a structured report, not a
-  free-text query. The graph completing without crashing, with the
-  failure visible in state, is what "graceful degradation" means here.
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
@@ -52,11 +41,14 @@ class CopilotState(TypedDict, total=False):
     module_outline_report: ModuleOutlineReport | None
     assessment_report: AssessmentItemReport | None
 
-    # FR-5 bookkeeping — not part of the original TypedDict, needed to
-    # actually track and surface the resilience controls' outcomes.
+    # FR-5 resilience bookkeeping
     step_count: int
     degraded: bool
     error: str | None
+
+    # Human-in-the-Loop review tracking & audit trail
+    review_status: str | None
+    audit_trail: dict[str, Any] | None
 
 
 def _run_with_timeout(fn, timeout_seconds: int):
@@ -74,16 +66,16 @@ def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
         try:
             return fn()
         except AgentTimeoutError:
-            # Timeouts are not retried — see nodes.py's original rationale:
-            # retrying a slow call rarely helps and delays degradation.
             raise
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if attempt < max_retries:
                 time.sleep(RETRY_BACKOFF_BASE_SECONDS * (2 ** attempt))
     if last_exc is not None:
-         raise last_exc
+        raise last_exc
     raise RuntimeError("Retry loop completed without executing function.")
+
+
 def _check_iteration_cap(state: CopilotState) -> int:
     step_count = state.get("step_count", 0) + 1
     if step_count > MAX_ITERATIONS:
@@ -117,8 +109,6 @@ def create_copilot_graph(
                 "error": None,
             }
         except Exception as exc:  # noqa: BLE001
-            # Graceful degradation to plain RAG: fall back to raw
-            # requirement-doc evidence rather than failing the run.
             try:
                 plain = standards_mapper.get_plain_evidence(state["target_role"])
                 fallback_report = CompetencyGapReport(
@@ -126,9 +116,6 @@ def create_copilot_graph(
                     user_reported_subjects=state["user_reported_subjects"],
                     gaps=[],
                 )
-                # Plain-RAG citations aren't structured gaps — surfaced via
-                # the error message instead of forcing them into a shape
-                # CompetencyGapReport was never meant to hold.
                 citation_summary = "; ".join(c.content[:100] for c in plain.citations[:3])
                 error_message = f"{exc} | plain_rag_fallback_evidence: {citation_summary}"
             except Exception:  # noqa: BLE001
@@ -153,8 +140,6 @@ def create_copilot_graph(
             gap_report = state.get("competency_gap_report")
 
             if gap_report is None:
-                # Upstream already degraded to no usable gap report —
-                # nothing meaningful to build an outline from.
                 return {
                     "module_outline_report": None,
                     "step_count": step_count,
@@ -226,6 +211,21 @@ def create_copilot_graph(
         workflow.add_edge(current_node, "assessment_generator")
         current_node = "assessment_generator"
 
-    workflow.add_edge(current_node, END)
+    # --- HUMAN REVIEW BREAKPOINT NODE ---
+    def run_human_review(state: CopilotState):
+        """Passthrough node. Graph pauses BEFORE this node due to interrupt_before."""
+        step_count = _check_iteration_cap(state)
+        return {
+            "step_count": step_count,
+            "review_status": state.get("review_status", "approved"),
+        }
 
-    return workflow.compile(checkpointer=checkpointer)
+    workflow.add_node("human_review", run_human_review)
+    workflow.add_edge(current_node, "human_review")
+    workflow.add_edge("human_review", END)
+
+    # Compile with checkpointer and the crucial interrupt breakpoint
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["human_review"],
+    )
