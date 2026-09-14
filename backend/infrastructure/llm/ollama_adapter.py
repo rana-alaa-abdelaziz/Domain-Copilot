@@ -6,6 +6,7 @@ matches the provider-abstraction ADR's fallback-chain design.
 
 Requires `ollama pull llama3` and `ollama pull nomic-embed-text` locally.
 """
+
 from collections.abc import Iterator
 
 import ollama
@@ -51,7 +52,10 @@ class OllamaAdapter(LlmProvider):
         if not tool_calls:
             return {"tool": None, "arguments": {}}
         call = tool_calls[0]
-        return {"tool": call["function"]["name"], "arguments": call["function"]["arguments"]}
+        return {
+            "tool": call["function"]["name"],
+            "arguments": call["function"]["arguments"],
+        }
 
     def embed(self, text: str) -> list[float]:
         response = self._client.embeddings(model=_EMBEDDING_MODEL, prompt=text)

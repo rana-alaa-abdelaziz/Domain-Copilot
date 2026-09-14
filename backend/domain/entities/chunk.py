@@ -3,6 +3,7 @@ Plain domain entity for a chunk — no SQLAlchemy, no framework imports.
 Mirrors infrastructure/db/models.py's Chunk table; infrastructure maps
 between the two at the repository boundary, same pattern as document.py.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 

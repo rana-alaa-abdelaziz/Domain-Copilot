@@ -3,6 +3,7 @@ Hosted LlmProvider implementation using the OpenAI SDK. Only this file
 (and ollama_adapter.py) may import the provider SDK — domain and
 application code depend on the LlmProvider port, never on this module.
 """
+
 from collections.abc import Iterator
 
 from openai import OpenAI

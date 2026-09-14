@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-09-11 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -22,7 +23,9 @@ def upgrade() -> None:
     # 1. Create document table
     op.create_table(
         "document",
-        sa.Column("doc_id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False),
+        sa.Column(
+            "doc_id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False
+        ),
         sa.Column("source", sa.String(length=512), nullable=False),
         sa.Column("version", sa.String(length=64), nullable=False),
         sa.Column("hash", sa.String(length=64), nullable=False, unique=True),
@@ -33,7 +36,9 @@ def upgrade() -> None:
     # 2. Create ingestion_status table
     op.create_table(
         "ingestion_status",
-        sa.Column("id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False),
+        sa.Column(
+            "id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False
+        ),
         sa.Column(
             "doc_id",
             postgresql.UUID(as_uuid=False),
@@ -60,7 +65,9 @@ def upgrade() -> None:
     # 3. Create chunk table
     op.create_table(
         "chunk",
-        sa.Column("chunk_id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False),
+        sa.Column(
+            "chunk_id", postgresql.UUID(as_uuid=False), primary_key=True, nullable=False
+        ),
         sa.Column(
             "doc_id",
             postgresql.UUID(as_uuid=False),

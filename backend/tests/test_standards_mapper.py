@@ -1,4 +1,4 @@
-﻿from unittest.mock import MagicMock
+from unittest.mock import MagicMock
 
 from backend.application.agents.standards_mapper import StandardsMapper
 from backend.application.use_cases.hybrid_retrieve import (
@@ -29,12 +29,16 @@ def test_standards_mapper_deterministic_matching():
     # Side 1 Requirement chunks
     side1_citations = [
         _make_citation("chunk-req-1", "Required: RESTful APIs and Git."),
-        _make_citation("chunk-req-2", "Must have Relational Database Design SQL and Unit Testing."),
+        _make_citation(
+            "chunk-req-2", "Must have Relational Database Design SQL and Unit Testing."
+        ),
     ]
 
     # Side 2 Reference Curriculum chunks
     side2_api_citations = [
-        _make_citation("chunk-curr-api", "Syllabus covers REST API endpoints and HTTP methods.")
+        _make_citation(
+            "chunk-curr-api", "Syllabus covers REST API endpoints and HTTP methods."
+        )
     ]
     side2_git_citations = [
         _make_citation("chunk-curr-git", "Syllabus covers Git branching and commits.")
@@ -75,7 +79,11 @@ def test_standards_mapper_deterministic_matching():
     for gap in report.gaps:
         assert len(gap.required_by_chunk_ids) > 0
         assert gap.severity in {"critical", "moderate", "minor"}
-        assert gap.coverage_source in {"corpus_citation", "model_inference", "unverified"}
+        assert gap.coverage_source in {
+            "corpus_citation",
+            "model_inference",
+            "unverified",
+        }
 
     api_gap = next(g for g in report.gaps if "API" in g.competency)
     assert api_gap.coverage_source == "corpus_citation"

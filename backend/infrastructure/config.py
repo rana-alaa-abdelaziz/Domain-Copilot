@@ -6,6 +6,7 @@ config-driven, not hardcoded: set LLM_PROVIDER=openai or LLM_PROVIDER=ollama
 in .env and get_llm_provider() returns the matching adapter with no code
 change required elsewhere.
 """
+
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -43,13 +44,16 @@ def get_llm_provider(settings: Settings | None = None) -> LlmProvider:
 
     if settings.llm_provider == "ollama":
         from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+
         return OllamaAdapter(base_url=settings.ollama_base_url)
 
     if settings.llm_provider == "openai":
         if not settings.openai_api_key:
             from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+
             return OllamaAdapter(base_url=settings.ollama_base_url)
         from backend.infrastructure.llm.openai_adapter import OpenAIAdapter
+
         return OpenAIAdapter(api_key=settings.openai_api_key)
 
     raise ValueError(

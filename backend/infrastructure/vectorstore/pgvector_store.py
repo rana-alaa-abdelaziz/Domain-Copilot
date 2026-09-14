@@ -9,6 +9,7 @@ table: ChunkRepository owns chunk CRUD, this owns similarity search.
 Swapping to a dedicated vector store (Qdrant, etc.) later means
 replacing only this file — ChunkRepository is untouched.
 """
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,9 @@ class PgVectorStore(VectorStore):
     def __init__(self, session: Session):
         self._session = session
 
-    def upsert(self, ids: list[str], vectors: list[list[float]], metadata: list[dict]) -> None:
+    def upsert(
+        self, ids: list[str], vectors: list[list[float]], metadata: list[dict]
+    ) -> None:
         # metadata is accepted for VectorStore-interface compatibility but
         # unused here: chunk metadata (content, page, standard_id, ...)
         # already lives on the chunk row itself, written by ChunkRepository
@@ -70,9 +73,10 @@ class PgVectorStore(VectorStore):
             category_filter_sql = "AND document.doc_category = :doc_category"
             params["doc_category"] = doc_category
 
-        rows = self._session.execute(
-            text(
-                f"""
+        rows = (
+            self._session.execute(
+                text(
+                    f"""
                 SELECT chunk.chunk_id, chunk.doc_id, chunk.content, chunk.page,
                        chunk.standard_id,
                        1 - (chunk.embedding <=> CAST(:query_vector AS vector)) AS score
@@ -84,10 +88,17 @@ class PgVectorStore(VectorStore):
                 ORDER BY chunk.embedding <=> CAST(:query_vector AS vector)
                 LIMIT :top_k
                 """
-            ),
-            params,
-        ).mappings().all()
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         return [
-            {**dict(row), "chunk_id": str(row["chunk_id"]), "doc_id": str(row["doc_id"])}
+            {
+                **dict(row),
+                "chunk_id": str(row["chunk_id"]),
+                "doc_id": str(row["doc_id"]),
+            }
             for row in rows
         ]

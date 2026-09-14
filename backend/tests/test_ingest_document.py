@@ -141,7 +141,9 @@ def test_extractor_failure_records_failed_status_and_raises(tmp_path: Path):
     with pytest.raises(DocumentExtractionError) as exc_info:
         use_case.execute(dummy_file, source="corrupt.pdf", version="1.0")
 
-    assert "Extraction failed for corrupt.pdf: Corrupt file header" in str(exc_info.value)
+    assert "Extraction failed for corrupt.pdf: Corrupt file header" in str(
+        exc_info.value
+    )
 
     doc = fake_repo.get_by_hash("hash-corrupt")
     assert doc is not None

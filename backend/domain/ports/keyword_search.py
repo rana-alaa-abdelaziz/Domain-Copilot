@@ -6,6 +6,7 @@ with its own backing index; a future swap to a dedicated search engine
 would replace only the infrastructure adapter, same boundary VectorStore
 already establishes.
 """
+
 from abc import ABC, abstractmethod
 
 

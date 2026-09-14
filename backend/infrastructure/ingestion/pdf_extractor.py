@@ -3,6 +3,7 @@ Deterministic PDF text extraction — no AI. Given a file path, returns
 cleaned, extracted text plus a SHA256 hash used for idempotency checks
 before any chunking or embedding happens.
 """
+
 import hashlib
 from collections import Counter
 from pathlib import Path

@@ -8,6 +8,7 @@ class LearningModule:
     target_competencies: list[str] = field(default_factory=list)
     key_topics: list[str] = field(default_factory=list)
 
+
 @dataclass
 class ModuleOutlineReport:
     target_role: str

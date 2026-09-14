@@ -5,6 +5,7 @@ Guarantees zero cross-domain citation contamination (e.g., SQL skills cannot mat
 Clean Architecture boundary: Plain Python class with ZERO framework, SDK,
 or LangGraph imports.
 """
+
 import contextlib
 import json
 import re
@@ -31,9 +32,22 @@ DOMAIN_KEYWORDS = {
 }
 
 GENERIC_STOPWORDS = {
-    "design", "development", "management", "implementation", "system", 
-    "systems", "applications", "application", "software", "engineering",
-    "service", "services", "basics", "fundamentals", "advanced", "core"
+    "design",
+    "development",
+    "management",
+    "implementation",
+    "system",
+    "systems",
+    "applications",
+    "application",
+    "software",
+    "engineering",
+    "service",
+    "services",
+    "basics",
+    "fundamentals",
+    "advanced",
+    "core",
 }
 
 
@@ -72,16 +86,19 @@ class StandardsMapper:
         return []
 
     @staticmethod
-    def _find_matching_subject(skill: str, user_reported_subjects: list[str]) -> str | None:
+    def _find_matching_subject(
+        skill: str, user_reported_subjects: list[str]
+    ) -> str | None:
         """
         Absolute domain partitioning check. Ensures cross-domain contamination is blocked.
         """
+
         # Tokenize to avoid substring bugs (e.g. "api" in "rapid", "rest" in "interest")
         def get_tokens(text: str) -> set[str]:
-            return set(re.findall(r'\b\w+\b', text.lower()))
+            return set(re.findall(r"\b\w+\b", text.lower()))
 
         skill_tokens = get_tokens(skill)
-        
+
         def get_domain(tokens: set[str]) -> str | None:
             for domain, keywords in DOMAIN_KEYWORDS.items():
                 if tokens.intersection(keywords):
@@ -89,29 +106,29 @@ class StandardsMapper:
             return None
 
         skill_domain = get_domain(skill_tokens)
-        
+
         best_match = None
         best_score = 0
 
         for subject in user_reported_subjects:
             subject_tokens = get_tokens(subject)
             subject_domain = get_domain(subject_tokens)
-            
+
             # 1. Enforce cross-domain boundary (Absolute block)
             if skill_domain and subject_domain and skill_domain != subject_domain:
                 continue
-                
+
             # 2. Calculate meaningful textual overlap
             meaningful_skill = skill_tokens - GENERIC_STOPWORDS
             meaningful_subject = subject_tokens - GENERIC_STOPWORDS
             overlap = len(meaningful_skill.intersection(meaningful_subject))
-            
+
             score = overlap
-            
+
             # 3. Same domain boost
             if skill_domain and skill_domain == subject_domain:
                 score += 2  # Boost for matching domain
-                
+
             # 4. Fallback for unrecognized domains
             if score == 0:
                 skill_lower = skill.lower()
@@ -119,11 +136,11 @@ class StandardsMapper:
                 # Substring fallback
                 if subject_lower in skill_lower or skill_lower in subject_lower:
                     score = 1
-                    
+
             if score > best_score:
                 best_score = score
                 best_match = subject
-                
+
         return best_match
 
     def run(
@@ -176,10 +193,14 @@ class StandardsMapper:
 
         for skill in extracted_skills:
             skill_lower = skill.lower()
-            skill_tokens = {w for w in skill_lower.split() if len(w) >= 2 and w not in GENERIC_STOPWORDS}
-            
+            skill_tokens = {
+                w
+                for w in skill_lower.split()
+                if len(w) >= 2 and w not in GENERIC_STOPWORDS
+            }
+
             matched_subject = self._find_matching_subject(skill, user_reported_subjects)
-            
+
             coverage_chunk_ids: list[str] = []
             coverage_source = "unverified"
             severity = "critical"
@@ -187,8 +208,10 @@ class StandardsMapper:
             if matched_subject:
                 citations = curriculum_by_subject.get(matched_subject, [])
                 relevant_citations = [
-                    c for c in citations
-                    if any(tok in c.content.lower() for tok in skill_tokens) or not skill_tokens
+                    c
+                    for c in citations
+                    if any(tok in c.content.lower() for tok in skill_tokens)
+                    or not skill_tokens
                 ]
                 if relevant_citations:
                     coverage_chunk_ids = [c.chunk_id for c in relevant_citations]

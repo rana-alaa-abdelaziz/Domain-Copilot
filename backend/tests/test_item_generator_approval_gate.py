@@ -23,7 +23,7 @@ def test_item_generator_blocks_without_approval(status):
         target_role="Cloud Architect",
         question_text="How to migrate?",
         correct_answer="Lift and shift",
-        rationale="Basic strategy"
+        rationale="Basic strategy",
     )
     review = ReviewTask(item_id="item-1", status=status)
 
@@ -41,7 +41,7 @@ def test_item_generator_allows_publish_after_approval(status):
         target_role="Cloud Architect",
         question_text="How to migrate?",
         correct_answer="Lift and shift",
-        rationale="Basic strategy"
+        rationale="Basic strategy",
     )
     review = ReviewTask(item_id="item-2", status=status)
 

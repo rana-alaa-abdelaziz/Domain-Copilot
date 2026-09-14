@@ -3,6 +3,7 @@ SQLAlchemy implementation of the ChunkRepository domain port.
 Translates between domain Chunk dataclasses and the ORM Chunk model at
 the boundary, same pattern as document_repository.py.
 """
+
 from sqlalchemy.orm import Session
 
 from backend.domain.entities.chunk import Chunk as DomainChunk

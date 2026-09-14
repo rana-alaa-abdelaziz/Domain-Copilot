@@ -1,31 +1,34 @@
-from backend.domain.entities import CompetencyGapReport
-from typing import TypedDict, List, Optional
-from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+from langgraph.graph import END, StateGraph
+
 from backend.application.agents.assessment_generator import AssessmentGenerator
-from backend.domain.entities.module_outline import ModuleOutlineReport
-from backend.domain.entities.assessment_item import AssessmentItemReport
-from backend.application.agents.standards_mapper import StandardsMapper
 from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
-from backend.application.agents.assessment_generator import AssessmentGenerator
+from backend.application.agents.standards_mapper import StandardsMapper
+from backend.domain.entities import CompetencyGapReport
+from backend.domain.entities.assessment_item import AssessmentItemReport
+from backend.domain.entities.module_outline import ModuleOutlineReport
+
 
 class CopilotState(TypedDict):
     target_role: str
-    user_reported_subjects: List[str]
-    competency_gap_report: Optional[CompetencyGapReport]
-    module_outline_report: Optional[ModuleOutlineReport]
-    assessment_report: Optional[AssessmentItemReport]
+    user_reported_subjects: list[str]
+    competency_gap_report: CompetencyGapReport | None
+    module_outline_report: ModuleOutlineReport | None
+    assessment_report: AssessmentItemReport | None
+
 
 def create_copilot_graph(
-    standards_mapper: StandardsMapper, 
-    outline_generator: Optional[ModuleOutlineGenerator] = None,
-    assessment_generator: Optional[AssessmentGenerator] = None
+    standards_mapper: StandardsMapper,
+    outline_generator: ModuleOutlineGenerator | None = None,
+    assessment_generator: AssessmentGenerator | None = None,
 ):
     workflow = StateGraph(CopilotState)
 
     def run_standards_mapper(state: CopilotState):
         report = standards_mapper.run(
             target_role=state["target_role"],
-            user_reported_subjects=state["user_reported_subjects"]
+            user_reported_subjects=state["user_reported_subjects"],
         )
         return {"competency_gap_report": report}
 
@@ -35,6 +38,7 @@ def create_copilot_graph(
     current_node = "standards_mapper"
 
     if outline_generator:
+
         def run_outline_generator(state: CopilotState):
             gap_report = state.get("competency_gap_report")
             outline_report = outline_generator.generate_outline(gap_report)
@@ -45,6 +49,7 @@ def create_copilot_graph(
         current_node = "module_outline_generator"
 
     if assessment_generator:
+
         def run_assessment_generator(state: CopilotState):
             gap_report = state.get("competency_gap_report")
             assessment_report = assessment_generator.generate_items(gap_report)

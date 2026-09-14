@@ -125,7 +125,9 @@ class SqlAlchemyDocumentRepository(DocumentRepository):
         )
 
     @staticmethod
-    def _to_domain_ingestion_status(orm_status: OrmIngestionStatus) -> DomainIngestionStatus:
+    def _to_domain_ingestion_status(
+        orm_status: OrmIngestionStatus,
+    ) -> DomainIngestionStatus:
         return DomainIngestionStatus(
             id=orm_status.id,
             doc_id=orm_status.doc_id,

@@ -14,6 +14,7 @@ Pure domain logic — no SQLAlchemy, no I/O. Takes two already-fetched
 result lists (dicts shaped like PgVectorStore.query() / PgKeywordSearch's
 output) and returns Citation entities ranked by fused score.
 """
+
 from backend.domain.entities.citation import Citation
 
 RRF_K = 60
@@ -50,7 +51,9 @@ def reciprocal_rank_fusion(
             score += 1.0 / (RRF_K + keyword_ranks[chunk_id])
         fused_scores[chunk_id] = score
 
-    ranked_ids = sorted(rows_by_id.keys(), key=lambda cid: fused_scores[cid], reverse=True)
+    ranked_ids = sorted(
+        rows_by_id.keys(), key=lambda cid: fused_scores[cid], reverse=True
+    )
 
     citations = []
     for chunk_id in ranked_ids[:top_k]:

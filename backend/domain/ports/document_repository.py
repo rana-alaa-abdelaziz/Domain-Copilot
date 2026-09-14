@@ -3,6 +3,7 @@ Port the application layer depends on. Infrastructure provides the
 SQLAlchemy-backed implementation. No infra import here — this is the
 boundary the acceptance test (swap DB, no business-logic change) checks.
 """
+
 from abc import ABC, abstractmethod
 
 from backend.domain.entities.document import Document, IngestionStatus

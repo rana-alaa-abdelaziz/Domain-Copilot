@@ -3,6 +3,7 @@ Port the application layer depends on for chunk persistence. Infrastructure
 provides the SQLAlchemy-backed implementation. No infra import here — same
 boundary DocumentRepository establishes.
 """
+
 from abc import ABC, abstractmethod
 
 from backend.domain.entities.chunk import Chunk
@@ -23,7 +24,6 @@ class ChunkRepository(ABC):
         """Supports a future explicit re-chunk operation (not used by the
         default idempotent path, but needed so re-chunking isn't a one-way
         door once a strategy changes)."""
-
 
     @abstractmethod
     def get_unembedded_chunks(self, doc_id: str) -> list[Chunk]:

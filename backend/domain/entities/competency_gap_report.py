@@ -2,6 +2,7 @@
 Domain entity representing a structured Competency Gap Report.
 Zero dependencies on external libraries or frameworks (Clean Architecture).
 """
+
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -23,7 +24,11 @@ class CompetencyGap:
     def __post_init__(self):
         if not self.competency or not self.competency.strip():
             raise ValueError("Competency name cannot be empty.")
-        if self.coverage_source not in {"corpus_citation", "model_inference", "unverified"}:
+        if self.coverage_source not in {
+            "corpus_citation",
+            "model_inference",
+            "unverified",
+        }:
             raise ValueError(f"Invalid coverage_source: {self.coverage_source}")
         if self.severity not in {"critical", "moderate", "minor"}:
             raise ValueError(f"Invalid severity: {self.severity}")
@@ -42,7 +47,11 @@ class CompetencyGapReport:
 
     @property
     def covered_competencies(self) -> list[CompetencyGap]:
-        return [g for g in self.gaps if g.coverage_source in {"corpus_citation", "model_inference"}]
+        return [
+            g
+            for g in self.gaps
+            if g.coverage_source in {"corpus_citation", "model_inference"}
+        ]
 
     @property
     def unverified_competencies(self) -> list[CompetencyGap]:

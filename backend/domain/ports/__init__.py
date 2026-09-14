@@ -33,7 +33,9 @@ class LlmProvider(ABC):
 
 class VectorStore(ABC):
     @abstractmethod
-    def upsert(self, ids: list[str], vectors: list[list[float]], metadata: list[dict]) -> None: ...
+    def upsert(
+        self, ids: list[str], vectors: list[list[float]], metadata: list[dict]
+    ) -> None: ...
 
     @abstractmethod
     def query(
@@ -51,5 +53,3 @@ __all__ = [
     "LlmProvider",
     "VectorStore",
 ]
-
-

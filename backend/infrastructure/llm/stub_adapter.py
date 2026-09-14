@@ -17,4 +17,4 @@ class StubLlmAdapter(LlmProvider):
         return {"tool": None, "arguments": {}}
 
     def embed(self, text: str) -> list[float]:
-        return [0.0] * 768
+        return [0.0] * 768

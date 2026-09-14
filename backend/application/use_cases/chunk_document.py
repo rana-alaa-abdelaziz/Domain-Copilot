@@ -12,6 +12,7 @@ reserved for the final embed+index stage — a chunked-but-not-yet-embedded
 document must still read as PROCESSING, or nothing downstream has an
 accurate signal that it still needs work.
 """
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
