@@ -24,6 +24,11 @@ class AssessmentItem(BaseModel):
     difficulty: str = Field(
         default="intermediate", description="beginner, intermediate, or advanced"
     )
+    source_chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="Chunk IDs the retrieved evidence for this item came from — "
+        "traceability back to source material, required for grounding.",
+    )
 
 
 class AssessmentItemReport(BaseModel):
