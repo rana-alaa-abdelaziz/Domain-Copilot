@@ -52,7 +52,6 @@ def db_session():
     session.close()
 
 
-
 def test_save_and_get_document_by_hash(db_session):
     repo = SqlAlchemyDocumentRepository(db_session)
     now = datetime.now(timezone.utc)
@@ -195,8 +194,9 @@ def test_ingest_use_case_with_sqlalchemy_repository(db_session, tmp_path):
     assert stored_status.status == DomainIngestionStatusEnum.PROCESSING
 
     # 2. Idempotent re-ingestion
-    reingest_result = use_case.execute(dummy_pdf, source="math_standards.pdf", version="1.0")
+    reingest_result = use_case.execute(
+        dummy_pdf, source="math_standards.pdf", version="1.0"
+    )
     assert reingest_result.was_skipped is True
     assert reingest_result.pages == []
     assert reingest_result.document.doc_id == stored_doc.doc_id
-

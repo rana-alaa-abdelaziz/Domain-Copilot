@@ -18,8 +18,14 @@ ALLOWED_STATUSES = ["approved", "edited_approved"]
 )
 @pytest.mark.parametrize("status", BLOCKING_STATUSES)
 def test_item_generator_blocks_without_approval(status):
-    item = AssessmentItem(id="item-1", content="placeholder item content")
-    review = ReviewTask(item_id=item.id, status=status)
+    item = AssessmentItem(
+        competency="Cloud Migration",
+        target_role="Cloud Architect",
+        question_text="How to migrate?",
+        correct_answer="Lift and shift",
+        rationale="Basic strategy",
+    )
+    review = ReviewTask(item_id="item-1", status=status)
 
     with pytest.raises(DomainError):
         SubmitForReview().publish(item, review)
@@ -30,7 +36,13 @@ def test_item_generator_blocks_without_approval(status):
 )
 @pytest.mark.parametrize("status", ALLOWED_STATUSES)
 def test_item_generator_allows_publish_after_approval(status):
-    item = AssessmentItem(id="item-2", content="placeholder item content")
-    review = ReviewTask(item_id=item.id, status=status)
+    item = AssessmentItem(
+        competency="Cloud Migration",
+        target_role="Cloud Architect",
+        question_text="How to migrate?",
+        correct_answer="Lift and shift",
+        rationale="Basic strategy",
+    )
+    review = ReviewTask(item_id="item-2", status=status)
 
     SubmitForReview().publish(item, review)

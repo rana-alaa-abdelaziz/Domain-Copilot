@@ -214,24 +214,26 @@ def test_hybrid_retrieve_filters_by_doc_category(db_session):
 
     requirement_doc_id = str(uuid.uuid4())
     reference_doc_id = str(uuid.uuid4())
-    db_session.add_all([
-        OrmDocument(
-            doc_id=requirement_doc_id,
-            source="role_requirements.pdf",
-            version="1.0",
-            hash="hash_requirement",
-            doc_category="requirement",
-            created_at=datetime.now(timezone.utc),
-        ),
-        OrmDocument(
-            doc_id=reference_doc_id,
-            source="reference_curriculum.pdf",
-            version="1.0",
-            hash="hash_reference",
-            doc_category="reference_curriculum",
-            created_at=datetime.now(timezone.utc),
-        ),
-    ])
+    db_session.add_all(
+        [
+            OrmDocument(
+                doc_id=requirement_doc_id,
+                source="role_requirements.pdf",
+                version="1.0",
+                hash="hash_requirement",
+                doc_category="requirement",
+                created_at=datetime.now(timezone.utc),
+            ),
+            OrmDocument(
+                doc_id=reference_doc_id,
+                source="reference_curriculum.pdf",
+                version="1.0",
+                hash="hash_reference",
+                doc_category="reference_curriculum",
+                created_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
 
     chunk_requirement = OrmChunk(
         chunk_id=str(uuid.uuid4()),

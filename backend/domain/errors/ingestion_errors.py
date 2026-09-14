@@ -1,5 +1,6 @@
 """Explicitly modelled domain errors — never let a raw SDK/DB exception
 bubble past the application layer."""
+
 from backend.domain.errors import DomainError
 
 
@@ -19,6 +20,7 @@ class ChunkingError(DomainError):
 class EmbeddingError(DomainError):
     """Raised when the LLM provider fails to produce an embedding for a
     chunk (provider error, rate limit, malformed response)."""
+
 
 # 7.MaxIterationsExceededError
 # 7.AgentTimeoutError

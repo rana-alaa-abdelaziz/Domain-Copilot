@@ -5,6 +5,7 @@ Orchestrates the FR-1 pipeline (extract -> clean -> chunk -> embed -> index)
 across all standards documents in `corpus/standards/` against the primary
 development database configured in `DATABASE_URL`.
 """
+
 import sys
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def main():
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-    print(f"Connecting to database: {db_url.split('@')[-1] if '@' in db_url else db_url}")
+    print(
+        f"Connecting to database: {db_url.split('@')[-1] if '@' in db_url else db_url}"
+    )
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
     session = Session()

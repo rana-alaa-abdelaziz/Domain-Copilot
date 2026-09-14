@@ -13,6 +13,7 @@ READY, per the note in chunk_document.py — a document only reads as fully
 usable once its chunks are both persisted AND embedded, not merely
 persisted.
 """
+
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone

@@ -1,4 +1,5 @@
 """Unit tests for reciprocal_rank_fusion — pure function, no DB needed."""
+
 from backend.domain.services.retrieval_fusion import RRF_K, reciprocal_rank_fusion
 
 

@@ -7,6 +7,7 @@ not stored in the file), so this uses heading-based sections instead of
 page numbers — Chunk.page will store a section label for DOCX-sourced
 chunks rather than a page number.
 """
+
 from pathlib import Path
 
 from docx import Document as DocxDocument

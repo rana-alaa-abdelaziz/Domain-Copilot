@@ -3,6 +3,7 @@ Plain domain entities — no SQLAlchemy, no framework imports. These are
 what the application layer works with; infrastructure maps them to/from
 ORM models at the boundary.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum

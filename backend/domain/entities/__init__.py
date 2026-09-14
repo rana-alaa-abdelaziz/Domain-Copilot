@@ -1,29 +1,19 @@
+from backend.domain.entities.assessment_item import AssessmentItem
 from backend.domain.entities.chunk import Chunk
-from backend.domain.entities.document import (
-    Document,
-    IngestionStatus,
-    IngestionStatusEnum,
+from backend.domain.entities.citation import Citation
+from backend.domain.entities.competency_gap_report import (
+    CompetencyGap,
+    CompetencyGapReport,
 )
-
-
-class AssessmentItem:
-    def __init__(self, id: str, content: str):
-        self.id = id
-        self.content = content
-
-
-class ReviewTask:
-    def __init__(self, item_id: str, status: str):
-        self.item_id = item_id
-        self.status = status
-
+from backend.domain.entities.document import Document
+from backend.domain.entities.review_task import ReviewTask
 
 __all__ = [
     "AssessmentItem",
     "Chunk",
+    "Citation",
+    "CompetencyGap",
+    "CompetencyGapReport",
     "Document",
-    "IngestionStatus",
-    "IngestionStatusEnum",
     "ReviewTask",
 ]
-

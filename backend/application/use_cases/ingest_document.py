@@ -8,6 +8,7 @@ Idempotency: re-ingesting the same file (same content hash) is a no-op
 that returns an IngestionResult with was_skipped=True and pages=[],
 allowing downstream chunk/embed stages to short-circuit immediately.
 """
+
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field

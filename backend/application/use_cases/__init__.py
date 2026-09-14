@@ -1,32 +1,15 @@
-from backend.application.use_cases.chunk_document import (
-    ChunkDocumentUseCase,
-    ChunkingResult,
-)
-from backend.application.use_cases.ingest_document import (
-    IngestDocumentUseCase,
-    IngestionResult,
-)
-from backend.application.use_cases.ingest_pipeline import (
-    IngestPipelineUseCase,
-    PipelineResult,
-)
-
-
-class SubmitForReview:
-    def publish(self, item, review_task):
-        raise NotImplementedError(
-            "Publish path not yet implemented — this must enforce the "
-            "review-queue approval gate before landing real logic."
-        )
-
+from backend.application.use_cases.chunk_document import ChunkDocumentUseCase
+from backend.application.use_cases.embed_chunks import EmbedChunksUseCase
+from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.application.use_cases.ingest_document import IngestDocumentUseCase
+from backend.application.use_cases.ingest_pipeline import IngestPipelineUseCase
+from backend.application.use_cases.submit_for_review import SubmitForReview
 
 __all__ = [
     "ChunkDocumentUseCase",
-    "ChunkingResult",
+    "EmbedChunksUseCase",
+    "HybridRetrieveUseCase",
     "IngestDocumentUseCase",
     "IngestPipelineUseCase",
-    "IngestionResult",
-    "PipelineResult",
     "SubmitForReview",
 ]
-

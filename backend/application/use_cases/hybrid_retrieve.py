@@ -10,6 +10,7 @@ fusion, since a chunk might rank low in one list but high in the other —
 fusing on a too-small candidate set from either side would silently drop
 chunks RRF should have surfaced.
 """
+
 from dataclasses import dataclass
 
 from backend.domain.entities.citation import Citation

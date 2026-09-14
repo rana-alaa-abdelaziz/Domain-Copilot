@@ -6,6 +6,7 @@ lookup: chunk_id (the traceable key), doc_id, page/section, standard_id,
 and the two component scores plus the fused rank so retrieval quality is
 inspectable, not just a black-box ordering.
 """
+
 from dataclasses import dataclass
 
 

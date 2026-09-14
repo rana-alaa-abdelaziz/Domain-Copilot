@@ -3,6 +3,7 @@
 SQLAlchemy ORM models. Lives entirely in infrastructure/ — domain/entities
 stays plain Pydantic and must never import from this file.
 """
+
 import uuid
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
@@ -55,24 +56,35 @@ class Document(Base):
     __tablename__ = "document"
 
     doc_id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    source = Column(String, nullable=False)            # filename or origin reference
+    source = Column(String, nullable=False)  # filename or origin reference
     version = Column(String, nullable=False)
     hash = Column(String, nullable=False, unique=True)  # SHA256 — idempotency key
-    doc_category = Column(String, nullable=True)  # "requirement" | "methodology" | "reference_curriculum" | None
+    doc_category = Column(
+        String, nullable=True
+    )  # "requirement" | "methodology" | "reference_curriculum" | None
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
 
     ingestion_status = relationship(
-        "IngestionStatus", back_populates="document", uselist=False, cascade="all, delete-orphan"
+        "IngestionStatus",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
-    chunks = relationship("Chunk", back_populates="document", cascade="all, delete-orphan")
+    chunks = relationship(
+        "Chunk", back_populates="document", cascade="all, delete-orphan"
+    )
 
 
 class IngestionStatus(Base):
     __tablename__ = "ingestion_status"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    doc_id = Column(UUID(as_uuid=False), ForeignKey("document.doc_id"), nullable=False, unique=True)
+    doc_id = Column(
+        UUID(as_uuid=False), ForeignKey("document.doc_id"), nullable=False, unique=True
+    )
     status = Column(
         Enum(
             IngestionStatusEnum,
@@ -82,8 +94,10 @@ class IngestionStatus(Base):
         nullable=False,
         default=IngestionStatusEnum.PENDING,
     )
-    error_message = Column(Text, nullable=True)         # populated only when status == FAILED
-    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+    error_message = Column(Text, nullable=True)  # populated only when status == FAILED
+    updated_at = Column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
 
     document = relationship("Document", back_populates="ingestion_status")
 
@@ -94,12 +108,18 @@ class Chunk(Base):
     chunk_id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     doc_id = Column(UUID(as_uuid=False), ForeignKey("document.doc_id"), nullable=False)
     content = Column(Text, nullable=False)
-    chunk_index = Column(Integer, nullable=False)       # order within the document
-    standard_id = Column(String, nullable=True)         # nullable: not every chunk maps to a standard
-    hierarchy_path = Column(String, nullable=True)      # e.g. "framework > competency > indicator"
-    page = Column(String, nullable=True)                # page number or clause/section reference
+    chunk_index = Column(Integer, nullable=False)  # order within the document
+    standard_id = Column(
+        String, nullable=True
+    )  # nullable: not every chunk maps to a standard
+    hierarchy_path = Column(
+        String, nullable=True
+    )  # e.g. "framework > competency > indicator"
+    page = Column(String, nullable=True)  # page number or clause/section reference
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    embedding = Column(Vector(EMBEDDING_DIM), nullable=True)  # null until EmbedChunksUseCase runs
+    embedding = Column(
+        Vector(EMBEDDING_DIM), nullable=True
+    )  # null until EmbedChunksUseCase runs
     search_vector = Column(
         TSVECTOR,
         Computed("to_tsvector('english', content)", persisted=True),

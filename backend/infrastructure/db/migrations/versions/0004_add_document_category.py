@@ -5,6 +5,7 @@ Revises: 0003
 Create Date: 2026-09-16 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -31,9 +32,7 @@ def upgrade() -> None:
         "document",
         sa.Column(CATEGORY_COLUMN, sa.String(), nullable=True),
     )
-    op.create_index(
-        "ix_document_doc_category", "document", [CATEGORY_COLUMN]
-    )
+    op.create_index("ix_document_doc_category", "document", [CATEGORY_COLUMN])
 
 
 def downgrade() -> None:

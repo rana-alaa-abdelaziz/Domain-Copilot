@@ -117,7 +117,9 @@ def test_pipeline_extracts_and_chunks_new_document(db_session, sample_pdf: Path)
     doc.save(str(second_pdf))
     doc.close()
 
-    result = pipeline.execute(second_pdf, source="sample_standards_2.pdf", version="1.0")
+    result = pipeline.execute(
+        second_pdf, source="sample_standards_2.pdf", version="1.0"
+    )
 
     # 1. Assert ingestion succeeded and was not skipped
     assert result.ingestion.was_skipped is False

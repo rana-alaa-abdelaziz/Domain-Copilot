@@ -6,6 +6,7 @@ Does not construct repositories directly; dependencies are injected.
 Idempotency: if ingestion is skipped (same content hash already exists),
 chunking is skipped as well.
 """
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,7 +54,9 @@ class IngestPipelineUseCase:
         )
 
         if ingestion_result.was_skipped:
-            return PipelineResult(ingestion=ingestion_result, chunking=None, embedding=None)
+            return PipelineResult(
+                ingestion=ingestion_result, chunking=None, embedding=None
+            )
 
         chunking_result = self._chunk.execute(
             ingestion_result.document.doc_id, ingestion_result.pages
