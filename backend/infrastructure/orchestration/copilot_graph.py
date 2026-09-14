@@ -1,9 +1,9 @@
 
 
-from langgraph.checkpoint.postgres import PostgresSaver
-
-from langgraph.graph import END, StateGraph
 from typing import TypedDict
+
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.graph import END, StateGraph
 
 from backend.application.agents.assessment_generator import AssessmentGenerator
 from backend.application.agents.module_outline_generator import (
