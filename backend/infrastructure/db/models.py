@@ -132,3 +132,48 @@ class Chunk(Base):
         UniqueConstraint("doc_id", "chunk_index", name="uq_chunk_doc_order"),
         Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin"),
     )
+
+class ReviewTaskStatusEnum(str, PyEnum):
+    PENDING = "pending"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EDITED_APPROVED = "edited_approved"
+    ESCALATED = "escalated"
+
+
+class ReviewTaskPriorityEnum(str, PyEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class ReviewTask(Base):
+    __tablename__ = "review_task"
+
+    review_task_id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    thread_id = Column(String, nullable=False, unique=True)
+    item_id = Column(String, nullable=False)
+    target_role = Column(String, nullable=False)
+    status = Column(
+        Enum(
+            ReviewTaskStatusEnum,
+            name="reviewtaskstatusenum",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=ReviewTaskStatusEnum.PENDING,
+    )
+    priority = Column(
+        Enum(
+            ReviewTaskPriorityEnum,
+            name="reviewtaskpriorityenum",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+    )
+    sla_due_at = Column(DateTime(timezone=True), nullable=False)
+    assigned_reviewer_id = Column(String, nullable=True)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)

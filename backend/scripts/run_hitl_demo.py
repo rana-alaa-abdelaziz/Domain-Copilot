@@ -25,6 +25,9 @@ from backend.infrastructure.orchestration.copilot_graph import create_copilot_gr
 # Import your repository/vector store adapters here if needed, e.g.:
 # from backend.infrastructure.persistence.postgres_vector_store import PostgresVectorStore
 # from backend.infrastructure.persistence.postgres_keyword_search import PostgresKeywordSearch
+from backend.infrastructure.db.repositories.review_task_repository import SqlAlchemyReviewTaskRepository
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 def main():
@@ -52,14 +55,19 @@ def main():
         outline_generator = ModuleOutlineGenerator(retrieve_use_case=retrieve_use_case, llm_provider=llm_provider)
         assessment_generator = AssessmentGenerator(retrieve_use_case=retrieve_use_case, llm_provider=llm_provider)
 
+        engine = create_engine(db_url)
+        SessionLocal = sessionmaker(bind=engine)
+        review_task_repository = SqlAlchemyReviewTaskRepository(session=SessionLocal())
+
         graph = create_copilot_graph(
             standards_mapper=standards_mapper,
             outline_generator=outline_generator,
             assessment_generator=assessment_generator,
-            checkpointer=checkpointer
+            checkpointer=checkpointer,
+            review_task_repository=review_task_repository
         )
 
-        review_service = HumanReviewService(compiled_graph=graph)
+        review_service = HumanReviewService(graph=graph, review_task_repository=review_task_repository)
 
         thread_id = "demo-thread-001"
         config = {"configurable": {"thread_id": thread_id}}

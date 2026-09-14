@@ -1,6 +1,7 @@
 """
 FastAPI router for managing the Human-in-the-Loop review queue.
 """
+from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,6 +31,16 @@ def get_review_service(request: Request) -> HumanReviewService:
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Review service dependency is not bound to application state.",
+    )
+
+
+def get_review_task_repository(request: Request) -> ReviewTaskRepository:
+    """Dependency provider that pulls the review task repository from FastAPI app state."""
+    if hasattr(request.app.state, "review_task_repository") and request.app.state.review_task_repository:
+        return request.app.state.review_task_repository
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Review task repository dependency is not bound to application state.",
     )
 
 
@@ -85,3 +96,30 @@ def submit_review_decision(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process review decision: {exc}",
         ) from exc
+
+@router.get("/pending", status_code=status.HTTP_200_OK)
+def list_pending_reviews(
+    reviewer_id: str | None = None,
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+):
+    """The endpoint that was missing entirely — lets a reviewer discover
+    what's waiting for them without already knowing a thread_id."""
+    tasks = review_task_repo.list_pending(assigned_reviewer_id=reviewer_id)
+    return {"count": len(tasks), "tasks": tasks}
+
+
+class AssignRequest(BaseModel):
+    reviewer_id: str
+
+
+@router.post("/{thread_id}/assign", status_code=status.HTTP_200_OK)
+def assign_review(
+    thread_id: str,
+    payload: AssignRequest,
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+):
+    task = review_task_repo.get_by_thread_id(thread_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"No review task for thread '{thread_id}'")
+    review_task_repo.assign(task.review_task_id, payload.reviewer_id)
+    return {"thread_id": thread_id, "assigned_reviewer_id": payload.reviewer_id}

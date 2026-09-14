@@ -7,7 +7,11 @@ with backoff, graceful degradation) wrap every node here — no agent call
 in this file runs unprotected. Timeout uses ThreadPoolExecutor rather
 than signal.alarm since this must run on Windows, not just Unix.
 """
+from backend.domain.ports import review_task_repository
+import operator
 import time
+from typing import Annotated
+
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, TypedDict
@@ -27,6 +31,9 @@ from backend.domain.errors.orchestration_errors import (
     AgentTimeoutError,
     MaxIterationsExceededError,
 )
+from backend.domain.ports.review_task_repository import ReviewTaskRepository
+from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
+
 
 MAX_ITERATIONS = 10
 STEP_TIMEOUT_SECONDS = 60
@@ -40,6 +47,8 @@ class CopilotState(TypedDict, total=False):
     competency_gap_report: CompetencyGapReport | None
     module_outline_report: ModuleOutlineReport | None
     assessment_report: AssessmentItemReport | None
+    review_status: str | None
+    audit_trail: Annotated[list[dict[str, Any]], operator.add]  # was: dict[str, Any] | None
 
     # FR-5 resilience bookkeeping
     step_count: int
@@ -57,7 +66,7 @@ def _run_with_timeout(fn, timeout_seconds: int):
         try:
             return future.result(timeout=timeout_seconds)
         except FutureTimeoutError as exc:
-            raise AgentTimeoutError(f"Agent exceeded {timeout_seconds}s timeout") from exc
+            raise AgentTimeoutError("agent", timeout_seconds) from exc
 
 
 def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
@@ -79,7 +88,7 @@ def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
 def _check_iteration_cap(state: CopilotState) -> int:
     step_count = state.get("step_count", 0) + 1
     if step_count > MAX_ITERATIONS:
-        raise MaxIterationsExceededError(f"Workflow exceeded {MAX_ITERATIONS} node executions")
+        raise MaxIterationsExceededError("workflow", MAX_ITERATIONS)
     return step_count
 
 
@@ -88,6 +97,7 @@ def create_copilot_graph(
     outline_generator: ModuleOutlineGenerator | None = None,
     assessment_generator: AssessmentGenerator | None = None,
     checkpointer: PostgresSaver | None = None,
+    review_task_repository: ReviewTaskRepository | None = None,
 ):
     workflow = StateGraph(CopilotState)
 
@@ -211,17 +221,37 @@ def create_copilot_graph(
         workflow.add_edge(current_node, "assessment_generator")
         current_node = "assessment_generator"
 
-    # --- HUMAN REVIEW BREAKPOINT NODE ---
-    def run_human_review(state: CopilotState):
-        """Passthrough node. Graph pauses BEFORE this node due to interrupt_before."""
+    from langchain_core.runnables import RunnableConfig
+    
+    def run_create_review_task(state: CopilotState, config: RunnableConfig | None = None):
+        step_count = _check_iteration_cap(state)
+        if review_task_repository is not None:
+            gap_report = state.get("competency_gap_report")
+            thread_id = config["configurable"].get("thread_id") if config and "configurable" in config else None
+            
+            existing = review_task_repository.get_by_thread_id(thread_id) if thread_id else None
+            if existing is None and gap_report is not None and thread_id:
+                priority = compute_priority(gap_report)
+                review_task_repository.create(
+                    thread_id=thread_id,
+                    item_id=thread_id,
+                    target_role=state["target_role"],
+                    priority=priority,
+                    sla_due_at=compute_sla_due_at(priority),
+                )
+        return {"step_count": step_count}
+
+    def run_human_review(state: CopilotState, config: RunnableConfig | None = None):  
         step_count = _check_iteration_cap(state)
         return {
             "step_count": step_count,
             "review_status": state.get("review_status", "approved"),
         }
 
+    workflow.add_node("create_review_task", run_create_review_task)
     workflow.add_node("human_review", run_human_review)
-    workflow.add_edge(current_node, "human_review")
+    workflow.add_edge(current_node, "create_review_task")
+    workflow.add_edge("create_review_task", "human_review")
     workflow.add_edge("human_review", END)
 
     # Compile with checkpointer and the crucial interrupt breakpoint
