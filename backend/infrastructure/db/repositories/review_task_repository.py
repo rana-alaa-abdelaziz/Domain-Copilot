@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.domain.entities.review_task import ReviewTask as DomainReviewTask
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
+from backend.domain.services.review_task_transitions import can_transition
 from backend.infrastructure.db.models import ReviewTask as OrmReviewTask
 from backend.infrastructure.db.models import ReviewTaskStatusEnum
 
@@ -59,6 +60,13 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
         orm_task = self._session.get(OrmReviewTask, review_task_id)
         if orm_task is None:
             raise ValueError(f"No review_task found with id={review_task_id}")
+            
+        current_status = orm_task.status.value if hasattr(orm_task.status, "value") else orm_task.status
+        new_status = ReviewTaskStatusEnum.IN_REVIEW.value
+        
+        if not can_transition(current_status, new_status):
+            raise ValueError(f"Illegal state transition from {current_status} to {new_status}")
+            
         orm_task.assigned_reviewer_id = reviewer_id
         orm_task.status = ReviewTaskStatusEnum.IN_REVIEW
         if self._auto_commit:
@@ -70,6 +78,11 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
         orm_task = self._session.get(OrmReviewTask, review_task_id)
         if orm_task is None:
             raise ValueError(f"No review_task found with id={review_task_id}")
+            
+        current_status = orm_task.status.value if hasattr(orm_task.status, "value") else orm_task.status
+        if not can_transition(current_status, status):
+            raise ValueError(f"Illegal state transition from {current_status} to {status}")
+            
         orm_task.status = status
         if comment is not None:
             orm_task.comment = comment
@@ -129,7 +142,8 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
             rejection_rate = (rejected / total) * 100 if total > 0 else 0.0
 
             stats[reviewer] = {
-                "total_completed_or_processed": total,
+                "total_assigned": total,
+                "total_decided": approved + rejected + edited,
                 "approved": approved,
                 "rejected": rejected,
                 "edited_approved": edited,

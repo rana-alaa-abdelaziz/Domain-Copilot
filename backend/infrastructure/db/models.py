@@ -177,3 +177,21 @@ class ReviewTask(Base):
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+
+class PublishedCurriculum(Base):
+    __tablename__ = "published_curriculum"
+
+    published_id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    thread_id = Column(String, nullable=False, unique=True)
+    target_role = Column(String, nullable=False)
+    
+    # We use JSON since this must be cross-compatible; PostgreSQL's JSONB is handled
+    # automatically by SQLAlchemy's JSON when using psycopg/postgresql, but we can import
+    # JSONB from sqlalchemy.dialects.postgresql to be explicit.
+    from sqlalchemy.dialects.postgresql import JSONB
+    module_outline = Column(JSONB, nullable=False)
+    assessment_items = Column(JSONB, nullable=False)
+    
+    approved_by = Column(String, nullable=False)
+    published_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

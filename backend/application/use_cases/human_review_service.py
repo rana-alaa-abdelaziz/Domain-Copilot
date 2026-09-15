@@ -7,6 +7,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from backend.domain.ports.published_curriculum_repository import (
+    PublishedCurriculumRepository,
+)
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from backend.domain.ports.workflow_graph import WorkflowGraphPort
 
@@ -14,9 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 class HumanReviewService:
-    def __init__(self, graph: WorkflowGraphPort, review_task_repository: ReviewTaskRepository):
+    def __init__(
+        self,
+        graph: WorkflowGraphPort,
+        review_task_repository: ReviewTaskRepository,
+        published_curriculum_repository: PublishedCurriculumRepository | None = None,
+    ):
         self.graph = graph
         self._review_tasks = review_task_repository
+        self._published_curriculum = published_curriculum_repository
 
     def get_pending_review(self, thread_id: str) -> dict[str, Any]:
         thread_config = {"configurable": {"thread_id": thread_id}}
@@ -84,10 +93,20 @@ class HumanReviewService:
         self.graph.update_state(thread_config, update_payload)
         final_result = self.graph.invoke(None, thread_config)
 
+        is_published = False
+        published_id = None
+        if self._published_curriculum:
+            pub_record = self._published_curriculum.get_by_thread_id(thread_id)
+            if pub_record:
+                is_published = True
+                published_id = pub_record.published_id
+
         return {
             "thread_id": thread_id,
             "status": "completed",
             "review_status": domain_status,
+            "published": is_published,
+            "published_id": published_id,
             "audit": audit_entry,
             "final_state": {
                 "target_role": final_result.get("target_role"),

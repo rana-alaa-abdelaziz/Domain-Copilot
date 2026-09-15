@@ -22,7 +22,7 @@ class EscalationWorkerUseCase:
         escalated_count = 0
 
         for task in overdue_tasks:
-            if task.status == "pending":
+            if task.status in ("pending", "in_review"):
                 try:
                     self._repo.update_status(task.review_task_id, "escalated")
                     escalated_count += 1

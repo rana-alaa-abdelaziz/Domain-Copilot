@@ -16,15 +16,15 @@ def test_execute_no_overdue_tasks():
     repo_mock.list_overdue.assert_called_once()
     repo_mock.update_status.assert_not_called()
 
-def test_execute_overdue_but_not_pending():
+def test_execute_overdue_but_not_escalatable():
     repo_mock = Mock()
-    # Task is overdue but status is 'in_review'
+    # Task is overdue but status is 'approved'
     task = ReviewTask(
         review_task_id="task-1",
         thread_id="thread-1",
         item_id="item-1",
         target_role="expert",
-        status="in_review",
+        status="approved",
         priority="high",
         sla_due_at=datetime.now(timezone.utc),
         created_at=datetime.now(timezone.utc),
@@ -38,7 +38,7 @@ def test_execute_overdue_but_not_pending():
     assert escalated_count == 0
     repo_mock.update_status.assert_not_called()
 
-def test_execute_escalates_pending_tasks():
+def test_execute_escalates_pending_and_in_review_tasks():
     repo_mock = Mock()
     task1 = ReviewTask(
         review_task_id="task-1",
@@ -56,7 +56,7 @@ def test_execute_escalates_pending_tasks():
         thread_id="thread-2",
         item_id="item-2",
         target_role="expert",
-        status="pending",
+        status="in_review",
         priority="high",
         sla_due_at=datetime.now(timezone.utc),
         created_at=datetime.now(timezone.utc),

@@ -28,6 +28,9 @@ from backend.domain.errors.orchestration_errors import (
     AgentTimeoutError,
     MaxIterationsExceededError,
 )
+from backend.domain.ports.published_curriculum_repository import (
+    PublishedCurriculumRepository,
+)
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
 
@@ -91,6 +94,7 @@ def create_copilot_graph(
     assessment_generator: AssessmentGenerator | None = None,
     checkpointer: PostgresSaver | None = None,
     review_task_repository: ReviewTaskRepository | None = None,
+    published_curriculum_repository: PublishedCurriculumRepository | None = None,
 ):
     workflow = StateGraph(CopilotState)
 
@@ -241,11 +245,38 @@ def create_copilot_graph(
             "review_status": state.get("review_status", "approved"),
         }
 
+    def run_publish_curriculum(state: CopilotState, config: RunnableConfig | None = None):
+        step_count = _check_iteration_cap(state)
+        thread_id = config["configurable"].get("thread_id") if config and "configurable" in config else None
+        if published_curriculum_repository and thread_id:
+            gap_report = state.get("competency_gap_report")
+            outline = state.get("module_outline_report")
+            assessment = state.get("assessment_report")
+
+            if gap_report and outline and assessment:
+                import dataclasses
+                published_curriculum_repository.save(
+                    thread_id=thread_id,
+                    target_role=gap_report.target_role,
+                    module_outline=[dataclasses.asdict(m) for m in outline.modules],
+                    assessment_items=[item.model_dump() for item in assessment.items],
+                    approved_by="human_reviewer",
+                )
+        return {"step_count": step_count}
+
+    def route_after_review(state: CopilotState) -> str:
+        status = state.get("review_status")
+        if status in ("approved", "edited_approved"):
+            return "publish_curriculum"
+        return END
+
     workflow.add_node("create_review_task", run_create_review_task)
     workflow.add_node("human_review", run_human_review)
+    workflow.add_node("publish_curriculum", run_publish_curriculum)
     workflow.add_edge(current_node, "create_review_task")
     workflow.add_edge("create_review_task", "human_review")
-    workflow.add_edge("human_review", END)
+    workflow.add_conditional_edges("human_review", route_after_review, {"publish_curriculum": "publish_curriculum", END: END})
+    workflow.add_edge("publish_curriculum", END)
 
     # Compile with checkpointer and the crucial interrupt breakpoint
     return workflow.compile(

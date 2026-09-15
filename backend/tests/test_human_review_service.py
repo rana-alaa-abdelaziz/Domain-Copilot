@@ -59,6 +59,9 @@ def test_approve_resumes_graph_and_marks_review_task_approved(pg_session, test_d
         config = {"configurable": {"thread_id": thread_id}}
         graph.invoke({"target_role": "X", "user_reported_subjects": []}, config)
 
+        task = review_repo.get_by_thread_id(thread_id)
+        review_repo.assign(task.review_task_id, "test_reviewer")
+
         service = HumanReviewService(graph, review_repo)
         service.process_review_decision(thread_id, action="approve")
         

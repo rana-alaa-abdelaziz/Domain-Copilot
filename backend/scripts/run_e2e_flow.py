@@ -36,6 +36,9 @@ from backend.infrastructure.db.repositories.chunk_repository import (
 from backend.infrastructure.db.repositories.document_repository import (
     SqlAlchemyDocumentRepository,
 )
+from backend.infrastructure.db.repositories.published_curriculum_repository import (
+    SqlAlchemyPublishedCurriculumRepository,
+)
 from backend.infrastructure.db.repositories.review_task_repository import (
     SqlAlchemyReviewTaskRepository,
 )
@@ -60,6 +63,7 @@ def run_e2e():
     doc_repo = SqlAlchemyDocumentRepository(session)
     chunk_repo = SqlAlchemyChunkRepository(session)
     review_repo = SqlAlchemyReviewTaskRepository(session)
+    pub_repo = SqlAlchemyPublishedCurriculumRepository(session)
     
     # Needs to match Ollama running locally
     # If Ollama is not available, you can use StubLlmAdapter for testing
@@ -121,10 +125,15 @@ def run_e2e():
             outline_generator=outline_generator,
             assessment_generator=assessment_generator,
             checkpointer=checkpointer,
-            review_task_repository=review_repo
+            review_task_repository=review_repo,
+            published_curriculum_repository=pub_repo
         )
         
-        human_review_service = HumanReviewService(graph=graph, review_task_repository=review_repo)
+        human_review_service = HumanReviewService(
+            graph=graph, 
+            review_task_repository=review_repo,
+            published_curriculum_repository=pub_repo
+        )
         
         # 5. Run Graph Workflow
         print("\n⚙️ Running Copilot Graph for Target Role 'Backend .NET Developer'...")
@@ -185,6 +194,9 @@ def run_e2e():
             print(msg)
                 
             try:
+                # E2E demo acts as the reviewer; assign the task to itself first
+                review_repo.assign(task.review_task_id, reviewer_id="e2e_demo_user")
+                
                 # Process decision using HumanReviewService
                 comment = "Terminal demo comment" if action == "edit_with_comment" else None
                 result = human_review_service.process_review_decision(thread_id, action=action, instructor_comment=comment)
@@ -196,6 +208,12 @@ def run_e2e():
                 print(f"Final Task Status in DB: {final_task.status}")
                 if action == 'approve':
                     print(f"Assessment Items Generated: {len(assessment_report.items) if assessment_report else 0}")
+                    
+                    # Verify publication
+                    if result.get("published"):
+                        print(f"🏆 Verification Success: Curriculum was automatically published! (ID: {result.get('published_id')})")
+                    else:
+                        print("❌ Verification Failure: Curriculum was NOT published!")
                 
             except Exception as e:  # noqa: BLE001
                 print(f"Error during human review process: {e}")
