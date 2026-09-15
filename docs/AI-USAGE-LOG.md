@@ -157,3 +157,5 @@ is not evidence of what a document actually contains.
 - Replaced all `Mock` instances in `test_publish_routing.py` with fully populated Pydantic domain entities (`CompetencyGapReport`, `ModuleOutlineReport`, `AssessmentItemReport`) to ensure accurate test coverage and serialization compatibility with LangGraph's checkpointer.
 - Updated `run_e2e_flow.py` script to inject the `PublishedCurriculumRepository`, properly assign the review task to `e2e_demo_user` to clear the `in_review` guardrail, and explicitly verify automatic curriculum publication on `approve`.
 - Fixed a JSON serialization `TypeError` in `copilot_graph.py`'s `run_publish_curriculum` node by explicitly mapping `.model_dump()` across `outline.modules` (a list of Pydantic models) before passing it to the repository's `module_outline` JSONB field.
+- Fixed a regression where `human_review_service.py` failed to approve/reject tasks that hadn't explicitly been assigned by auto-assigning pending tasks to a default identity before saving the decision.
+- Added an idempotency check in `publish_curriculum` to ensure it skips re-saving if a curriculum for the same `thread_id` already exists.

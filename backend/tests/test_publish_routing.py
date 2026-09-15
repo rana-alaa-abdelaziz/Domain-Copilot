@@ -82,6 +82,7 @@ def test_rejected_review_never_publishes():
     # Let's also verify that if it's approved, it IS called
     # Reset mocks
     pub_repo.save.reset_mock()
+    pub_repo.get_by_thread_id.return_value = None
     config_approved = {"configurable": {"thread_id": "test-thread-2"}}
     graph.invoke({
         "target_role": "expert",

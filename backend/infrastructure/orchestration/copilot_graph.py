@@ -249,11 +249,12 @@ def create_copilot_graph(
         step_count = _check_iteration_cap(state)
         thread_id = config["configurable"].get("thread_id") if config and "configurable" in config else None
         if published_curriculum_repository and thread_id:
+            existing = published_curriculum_repository.get_by_thread_id(thread_id)
             gap_report = state.get("competency_gap_report")
             outline = state.get("module_outline_report")
             assessment = state.get("assessment_report")
 
-            if gap_report and outline and assessment:
+            if existing is None and gap_report and outline and assessment:
                 import dataclasses
                 published_curriculum_repository.save(
                     thread_id=thread_id,

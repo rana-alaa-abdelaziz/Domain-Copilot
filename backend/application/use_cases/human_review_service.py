@@ -53,6 +53,7 @@ class HumanReviewService:
         action: str,
         instructor_comment: str | None = None,
         edited_artifacts: dict[str, Any] | None = None,
+        reviewer_id: str = "system_auto_assign",
     ) -> dict[str, Any]:
         thread_config = {"configurable": {"thread_id": thread_id}}
         current_state = self.graph.get_state(thread_config)
@@ -72,6 +73,8 @@ class HumanReviewService:
         domain_status = status_map[action]
 
         if review_task is not None:
+            if review_task.status == "pending":
+                self._review_tasks.assign(review_task.review_task_id, reviewer_id=reviewer_id)
             self._review_tasks.update_status(
                 review_task.review_task_id, status=domain_status, comment=instructor_comment
             )
