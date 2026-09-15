@@ -1,4 +1,14 @@
-﻿| Target Component | Implemented? | Why Deferred | Interim Mitigation | Effort/Cost to Close |
+# System Design
+
+## Streaming and Cancellation (FR-6)
+The system supports token-level streaming (via the `/ask` endpoint) and progress streaming (via `/workflow`). 
+Cancellation is implemented cooperatively across async/sync boundaries:
+- A concurrent watcher task polls `request.is_disconnected()` and sets a `threading.Event` upon disconnect.
+- Background worker threads (e.g. running LLM streams) monitor this `cancel_event` flag on every chunk.
+- If set, they close their upstream generator, halting server-side compute and network traffic, and bubble a `ClientCancelledError` to short-circuit retry loops.
+- This ensures true cancellation without relying on heavy multiprocessing or forcefully terminating threads.
+
+| Target Component | Implemented? | Why Deferred | Interim Mitigation | Effort/Cost to Close |
 |---|---|---|---|---|
 | Full groundedness evaluation (generated answer checked against citations) | No | No answer-generation/agent use case exists yet — only retrieval is built | Retrieval-level proxy: check whether the top-ranked chunk itself contains expected keywords (scripts/eval.py) | ~2h once an answer-generation use case exists |
 | Indirect prompt-injection resistance testing | No | Requires a generation step that reads chunk content into a prompt — none exists yet | Direct (query-level) injection cases only, in eval/golden_set.yaml (q23, q24) | ~1h to add indirect cases once agents/generation exist |

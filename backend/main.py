@@ -74,6 +74,8 @@ async def lifespan(app: FastAPI):
         # 4. Bind HumanReviewService to FastAPI app state
         app.state.review_service = HumanReviewService(graph=graph, review_task_repository=review_task_repository)
         app.state.review_task_repository = review_task_repository
+        app.state.retrieve_use_case = retrieve_use_case
+        app.state.llm_provider = llm_provider
         
         yield
     

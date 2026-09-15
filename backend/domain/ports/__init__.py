@@ -10,6 +10,7 @@ VectorStore: interface for similarity search / upsert, implemented in
 infrastructure/vectorstore.
 """
 
+import threading
 from abc import ABC, abstractmethod
 
 from backend.domain.ports.chunk_repository import ChunkRepository
@@ -19,10 +20,10 @@ from backend.domain.ports.keyword_search import KeywordSearchPort
 
 class LlmProvider(ABC):
     @abstractmethod
-    def complete(self, prompt: str, **kwargs) -> str: ...
+    def complete(self, prompt: str, cancel_event: "threading.Event | None" = None, **kwargs) -> str: ...
 
     @abstractmethod
-    def stream(self, prompt: str, **kwargs): ...
+    def stream(self, prompt: str, cancel_event: "threading.Event | None" = None, **kwargs): ...
 
     @abstractmethod
     def call_tool(self, prompt: str, tools: list, **kwargs) -> dict: ...

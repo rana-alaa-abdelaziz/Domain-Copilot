@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Annotated, Any, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
 
@@ -26,6 +27,7 @@ from backend.domain.entities.assessment_item import AssessmentItemReport
 from backend.domain.entities.module_outline import ModuleOutlineReport
 from backend.domain.errors.orchestration_errors import (
     AgentTimeoutError,
+    ClientCancelledError,
     MaxIterationsExceededError,
 )
 from backend.domain.ports.published_curriculum_repository import (
@@ -55,13 +57,14 @@ class CopilotState(TypedDict, total=False):
     error: str | None
 
 
-
-def _run_with_timeout(fn, timeout_seconds: int):
+def _run_with_timeout(fn, timeout_seconds: int, cancel_event=None):
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(fn)
         try:
             return future.result(timeout=timeout_seconds)
         except FutureTimeoutError as exc:
+            if cancel_event:
+                cancel_event.set()
             raise AgentTimeoutError("agent", timeout_seconds) from exc
 
 
@@ -70,7 +73,7 @@ def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
     for attempt in range(max_retries + 1):
         try:
             return fn()
-        except AgentTimeoutError:
+        except (AgentTimeoutError, ClientCancelledError):
             raise
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
@@ -98,23 +101,27 @@ def create_copilot_graph(
 ):
     workflow = StateGraph(CopilotState)
 
-    def run_standards_mapper(state: CopilotState):
+    def run_standards_mapper(state: CopilotState, config: RunnableConfig | None = None):
         step_count = _check_iteration_cap(state)
+        cancel_event = config.get("configurable", {}).get("cancel_event") if config else None
 
         def _call():
             return standards_mapper.run(
                 target_role=state["target_role"],
                 user_reported_subjects=state["user_reported_subjects"],
+                cancel_event=cancel_event,
             )
 
         try:
-            report = _run_with_retry(lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS))
+            report = _run_with_retry(lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS, cancel_event))
             return {
                 "competency_gap_report": report,
                 "step_count": step_count,
                 "degraded": False,
                 "error": None,
             }
+        except ClientCancelledError:
+            raise
         except Exception as exc:  # noqa: BLE001
             try:
                 plain = standards_mapper.get_plain_evidence(state["target_role"])
@@ -142,9 +149,10 @@ def create_copilot_graph(
 
     if outline_generator:
 
-        def run_outline_generator(state: CopilotState):
+        def run_outline_generator(state: CopilotState, config: RunnableConfig | None = None):
             step_count = _check_iteration_cap(state)
             gap_report = state.get("competency_gap_report")
+            cancel_event = config.get("configurable", {}).get("cancel_event") if config else None
 
             if gap_report is None:
                 return {
@@ -155,11 +163,11 @@ def create_copilot_graph(
                 }
 
             def _call():
-                return outline_generator.generate_outline(gap_report)
+                return outline_generator.generate_outline(gap_report, cancel_event=cancel_event)
 
             try:
                 outline_report = _run_with_retry(
-                    lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS)
+                    lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS, cancel_event)
                 )
                 return {
                     "module_outline_report": outline_report,
@@ -167,6 +175,8 @@ def create_copilot_graph(
                     "degraded": state.get("degraded", False),
                     "error": state.get("error"),
                 }
+            except ClientCancelledError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 return {
                     "module_outline_report": None,
@@ -181,9 +191,10 @@ def create_copilot_graph(
 
     if assessment_generator:
 
-        def run_assessment_generator(state: CopilotState):
+        def run_assessment_generator(state: CopilotState, config: RunnableConfig | None = None):
             step_count = _check_iteration_cap(state)
             gap_report = state.get("competency_gap_report")
+            cancel_event = config.get("configurable", {}).get("cancel_event") if config else None
 
             if gap_report is None:
                 return {
@@ -194,11 +205,11 @@ def create_copilot_graph(
                 }
 
             def _call():
-                return assessment_generator.generate_items(gap_report)
+                return assessment_generator.generate_items(gap_report, cancel_event=cancel_event)
 
             try:
                 assessment_report = _run_with_retry(
-                    lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS)
+                    lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS, cancel_event)
                 )
                 return {
                     "assessment_report": assessment_report,
@@ -206,6 +217,8 @@ def create_copilot_graph(
                     "degraded": state.get("degraded", False),
                     "error": state.get("error"),
                 }
+            except ClientCancelledError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 return {
                     "assessment_report": None,
@@ -218,8 +231,6 @@ def create_copilot_graph(
         workflow.add_edge(current_node, "assessment_generator")
         current_node = "assessment_generator"
 
-    from langchain_core.runnables import RunnableConfig
-    
     def run_create_review_task(state: CopilotState, config: RunnableConfig | None = None):
         step_count = _check_iteration_cap(state)
         if review_task_repository is not None:

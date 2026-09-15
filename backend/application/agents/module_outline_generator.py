@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
@@ -42,7 +43,7 @@ class ModuleOutlineGenerator:
                 f"Module outline prompt artifact not found. Checked paths: {[str(p) for p in candidate_paths]}"
             )
 
-    def generate_outline(self, gap_report: CompetencyGapReport) -> ModuleOutlineReport:
+    def generate_outline(self, gap_report: CompetencyGapReport, cancel_event: "threading.Event | None" = None) -> ModuleOutlineReport:
         if not gap_report.unverified_competencies:
             return ModuleOutlineReport(target_role=gap_report.target_role, modules=[])
 
@@ -56,7 +57,7 @@ class ModuleOutlineGenerator:
         prompt = prompt.replace("{gaps_json}", json.dumps(gaps_data, indent=2))
 
         try:
-            raw_response = self.llm.complete(prompt=prompt)
+            raw_response = self.llm.complete(prompt=prompt, cancel_event=cancel_event)
             cleaned = (
                 raw_response.strip().replace("```json", "").replace("```", "").strip()
             )

@@ -9,6 +9,7 @@ or LangGraph imports.
 import contextlib
 import json
 import re
+import threading
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
@@ -144,7 +145,10 @@ class StandardsMapper:
         return best_match
 
     def run(
-        self, target_role: str, user_reported_subjects: list[str]
+        self,
+        target_role: str,
+        user_reported_subjects: list[str],
+        cancel_event: "threading.Event | None" = None,
     ) -> CompetencyGapReport:
         # 1. Retrieve Role Requirements (Side 1)
         req_retrieval = self._retrieve.execute(
@@ -175,7 +179,9 @@ class StandardsMapper:
         )
 
         llm_output = self._llm_provider.complete(
-            prompt=prompt, options={"temperature": 0.0, "num_ctx": 2048}
+            prompt=prompt,
+            cancel_event=cancel_event,
+            options={"temperature": 0.0, "num_ctx": 2048},
         )
         extracted_skills = self._parse_skills_list(llm_output)
 

@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
@@ -48,7 +49,12 @@ class AssessmentGenerator:
                 f"Assessment generator prompt artifact not found. Checked paths: {[str(p) for p in candidate_paths]}"
             )
 
-    def generate_items(self, report: CompetencyGapReport) -> AssessmentItemReport:
+    def generate_items(
+        self,
+        gap_report: CompetencyGapReport,
+        cancel_event: "threading.Event | None" = None,
+    ) -> AssessmentItemReport:
+        report = gap_report
         items: list[AssessmentItem] = []
 
         if not report.unverified_competencies:
@@ -75,13 +81,14 @@ class AssessmentGenerator:
                 target_role=report.target_role,
                 context_text=context_text,
                 source_chunk_ids=source_chunk_ids,
+                cancel_event=cancel_event,
             )
             items.append(item)
 
         return AssessmentItemReport(target_role=report.target_role, items=items)
 
     def _generate_one_item(
-        self, prompt: str, gap, target_role: str, context_text: str, source_chunk_ids: list[str]
+        self, prompt: str, gap, target_role: str, context_text: str, source_chunk_ids: list[str], cancel_event: "threading.Event | None" = None
     ) -> AssessmentItem:
         # raw_response starts as None so the except block below can tell
         # apart "the LLM call itself failed" (raw_response still None,
@@ -89,7 +96,7 @@ class AssessmentGenerator:
         # was malformed" (raw_response holds text worth retrying against).
         raw_response = None
         try:
-            raw_response = self.llm.complete(prompt=prompt)
+            raw_response = self.llm.complete(prompt=prompt, cancel_event=cancel_event)
             data = self._parse_json_response(raw_response)
             return self._build_item(data, gap, target_role, source_chunk_ids)
         except Exception:  # noqa: BLE001
@@ -100,7 +107,7 @@ class AssessmentGenerator:
                         f"required schema. Fix it and output ONLY valid JSON for "
                         f"competency '{gap.competency}':\n{raw_response}"
                     )
-                    retry_response = self.llm.complete(prompt=fix_prompt)
+                    retry_response = self.llm.complete(prompt=fix_prompt, cancel_event=cancel_event)
                     data = self._parse_json_response(retry_response)
                     return self._build_item(data, gap, target_role, source_chunk_ids)
                 except Exception as e:  # noqa: BLE001

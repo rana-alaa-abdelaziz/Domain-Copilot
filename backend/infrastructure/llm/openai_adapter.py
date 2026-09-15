@@ -4,11 +4,16 @@ Hosted LlmProvider implementation using the OpenAI SDK. Only this file
 application code depend on the LlmProvider port, never on this module.
 """
 
+import logging
+import threading
 from collections.abc import Iterator
 
 from openai import OpenAI
 
+from backend.domain.errors.orchestration_errors import ClientCancelledError
 from backend.domain.ports import LlmProvider
+
+logger = logging.getLogger(__name__)
 
 # Kept in sync with backend.infrastructure.config.Settings.embedding_dim
 # and the pgvector column width in migration 0002 — text-embedding-3-small
@@ -23,25 +28,35 @@ class OpenAIAdapter(LlmProvider):
     def __init__(self, api_key: str):
         self._client = OpenAI(api_key=api_key)
 
-    def complete(self, prompt: str, **kwargs) -> str:
-        response = self._client.chat.completions.create(
-            model=kwargs.pop("model", _CHAT_MODEL),
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
-        return response.choices[0].message.content or ""
+    def complete(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> str:
+        chunks = list(self.stream(prompt, cancel_event=cancel_event, **kwargs))
+        
+        if cancel_event and cancel_event.is_set():
+            raise ClientCancelledError()
+            
+        return "".join(chunks)
 
-    def stream(self, prompt: str, **kwargs) -> Iterator[str]:
+    def stream(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> Iterator[str]:
         stream = self._client.chat.completions.create(
             model=kwargs.pop("model", _CHAT_MODEL),
             messages=[{"role": "user", "content": prompt}],
             stream=True,
+            stream_options={"include_usage": True},
             **kwargs,
         )
         for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield delta
+            if cancel_event and cancel_event.is_set():
+                stream.close()
+                break
+                
+            if chunk.usage:
+                # FR-9 cost accounting
+                logger.info(f"OpenAI usage: {chunk.usage.prompt_tokens} prompt, {chunk.usage.completion_tokens} completion")
+                
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
 
     def call_tool(self, prompt: str, tools: list, **kwargs) -> dict:
         response = self._client.chat.completions.create(

@@ -23,3 +23,10 @@ class MaxIterationsExceededError(OrchestrationError):
         super().__init__(f"Graph node '{node_name}' exceeded maximum allowed iterations ({max_iterations}).")
         self.node_name = node_name
         self.max_iterations = max_iterations
+
+
+class ClientCancelledError(OrchestrationError):
+    """Raised when a background task or agent call is aborted due to client disconnection."""
+
+    def __init__(self, message: str = "Client cancelled the request."):
+        super().__init__(message)
