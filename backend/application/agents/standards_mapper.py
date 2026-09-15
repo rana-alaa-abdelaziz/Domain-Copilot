@@ -179,14 +179,13 @@ class StandardsMapper:
         )
         extracted_skills = self._parse_skills_list(llm_output)
 
+
         if not extracted_skills:
-            extracted_skills = [
-                "RESTful API Design & Implementation",
-                "Relational Database Management & SQL",
-                "Data Structures & Algorithms",
-                "Version Control with Git",
-                "Unit Testing & Quality Assurance",
-            ]
+ 
+            extracted_skills = [f"Core Competencies in {subject}" for subject in user_reported_subjects]
+            
+            if not extracted_skills:
+                extracted_skills = [f"Foundational Standards for {target_role}"]
 
         # 4. Strict Deterministic Matching with Absolute Domain Partitioning
         gaps: list[CompetencyGap] = []
