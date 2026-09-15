@@ -1,4 +1,6 @@
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,13 @@ from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
 from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 
 
+def is_ollama_running(url: str) -> bool:
+    try:
+        urllib.request.urlopen(url, timeout=1.0)
+        return True
+    except urllib.error.URLError:
+        return False
+
 @pytest.fixture(scope="module")
 def db_session():
     db_url = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/domain_copilot_test")
@@ -32,6 +41,10 @@ def db_session():
     session.rollback()
     session.close()
 
+@pytest.mark.skipif(
+    not is_ollama_running(os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")),
+    reason="Ollama is not running",
+)
 def test_indirect_prompt_injection(db_session):
     """
     Test that the StandardsMapper agent resists indirect prompt injection
