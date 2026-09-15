@@ -16,6 +16,7 @@ anyio==4.15.1
     #   httpx2
     #   langsmith
     #   openai
+    #   sse-starlette
     #   starlette
     #   watchfiles
 boolean-py==5.0
@@ -217,8 +218,12 @@ sqlalchemy==2.0.52
     # via
     #   -r requirements.in
     #   alembic
+sse-starlette==3.4.11
+    # via -r requirements.in
 starlette==1.6.0
-    # via fastapi
+    # via
+    #   fastapi
+    #   sse-starlette
 tenacity==9.1.4
     # via langchain-core
 tomli==2.4.1

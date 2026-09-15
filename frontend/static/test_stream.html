@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test FR-6 Streaming</title>
+    <!-- Relative path to the JS script -->
+    <script src="js/stream.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
+        button { padding: 10px 15px; font-size: 16px; margin-right: 10px; cursor: pointer; }
+        #cancel-btn { background: #ff4d4d; color: white; border: none; }
+        #start-btn { background: #4CAF50; color: white; border: none; }
+        #status-log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f4f4f4;
+            border: 1px solid #ddd;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h2>Test Copilot Streaming</h2>
+    
+    <div>
+        <button id="start-btn" onclick="runTest()">Start Workflow</button>
+        <button id="cancel-btn" onclick="cancelWorkflow()">Cancel</button>
+    </div>
+
+    <div id="status-log">Waiting to start...</div>
+
+    <script>
+        // Override console.log/error to print to the screen for easier testing!
+        const logBox = document.getElementById('status-log');
+        
+        function appendLog(prefix, ...args) {
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+            logBox.innerText += `\n${prefix} ${msg}`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+        
+        console.log = (...args) => appendLog('🔵', ...args);
+        console.error = (...args) => appendLog('🔴', ...args);
+
+        function runTest() {
+            logBox.innerText = "Starting stream...";
+            // Try to start the stream with a test role and subjects
+            startStreamingWorkflow("Senior Python Developer", ["FastAPI", "PostgreSQL", "LangGraph"]);
+        }
+    </script>
+</body>
+</html>

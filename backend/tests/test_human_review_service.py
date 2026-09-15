@@ -37,7 +37,7 @@ def pg_session(test_db_url):
 
 
 class DummyStandardsMapper:
-    def run(self, target_role, user_reported_subjects):
+    def run(self, target_role, user_reported_subjects, cancel_event=None):
         from backend.domain.entities import CompetencyGapReport
         return CompetencyGapReport(target_role=target_role, user_reported_subjects=user_reported_subjects, gaps=[])
 
