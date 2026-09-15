@@ -30,6 +30,10 @@ class ReviewTaskRepository(ABC):
         thread_id."""
 
     @abstractmethod
+    def list_completed(self) -> list[ReviewTask]:
+        """Returns all reviewed tasks (approved, rejected, edited)."""
+
+    @abstractmethod
     def assign(self, review_task_id: str, reviewer_id: str) -> None:
         """Assigns a task to a reviewer, moving status to 'in_review'."""
 

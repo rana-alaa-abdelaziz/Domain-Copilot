@@ -112,6 +112,15 @@ def list_pending_reviews(
     return {"count": len(tasks), "tasks": tasks}
 
 
+@router.get("/completed", status_code=status.HTTP_200_OK)
+def list_completed_reviews(
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+):
+    """Fetches all reviewed tasks."""
+    tasks = review_task_repo.list_completed()
+    return {"count": len(tasks), "tasks": tasks}
+
+
 class AssignRequest(BaseModel):
     reviewer_id: str
 

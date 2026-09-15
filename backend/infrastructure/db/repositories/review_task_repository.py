@@ -56,6 +56,21 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
         )
         return [self._to_domain(t) for t in query.all()]
 
+    def list_completed(self) -> list[DomainReviewTask]:
+        query = self._session.query(OrmReviewTask).filter(
+            OrmReviewTask.status.in_(
+                [
+                    ReviewTaskStatusEnum.APPROVED,
+                    ReviewTaskStatusEnum.REJECTED,
+                    ReviewTaskStatusEnum.EDITED_APPROVED,
+                ]
+            )
+        )
+        query = query.order_by(OrmReviewTask.updated_at.desc())
+        return [self._to_domain(t) for t in query.all()]
+
+
+
     def assign(self, review_task_id: str, reviewer_id: str) -> None:
         orm_task = self._session.get(OrmReviewTask, review_task_id)
         if orm_task is None:

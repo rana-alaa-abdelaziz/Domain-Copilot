@@ -12,12 +12,21 @@ from backend.application.agents.module_outline_generator import ModuleOutlineGen
 from backend.application.agents.standards_mapper import StandardsMapper
 from backend.application.use_cases.human_review_service import HumanReviewService
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.application.use_cases.chunk_document import ChunkDocumentUseCase
+from backend.application.use_cases.embed_chunks import EmbedChunksUseCase
+from backend.application.use_cases.ingest_document import IngestDocumentUseCase
+from backend.application.use_cases.ingest_pipeline import IngestPipelineUseCase
 from backend.infrastructure.api.review_router import router as review_router
 from backend.infrastructure.api.streaming_router import router as streaming_router
+from backend.infrastructure.api.ingest_router import router as ingest_router
+from backend.infrastructure.api.trace_router import router as trace_router
 from backend.infrastructure.config import get_llm_provider
 from backend.infrastructure.db.repositories.review_task_repository import (
     SqlAlchemyReviewTaskRepository,
 )
+from backend.infrastructure.db.repositories.chunk_repository import SqlAlchemyChunkRepository
+from backend.infrastructure.db.repositories.document_repository import SqlAlchemyDocumentRepository
+from fastapi.responses import FileResponse
 from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
 from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
 from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
@@ -77,6 +86,21 @@ async def lifespan(app: FastAPI):
         app.state.retrieve_use_case = retrieve_use_case
         app.state.llm_provider = llm_provider
         
+        doc_repo = SqlAlchemyDocumentRepository(session=session)
+        chunk_repo = SqlAlchemyChunkRepository(session=session)
+        ingest_doc = IngestDocumentUseCase(repository=doc_repo)
+        chunk_doc = ChunkDocumentUseCase(chunk_repository=chunk_repo)
+        embed_chunks = EmbedChunksUseCase(
+            chunk_repository=chunk_repo, 
+            document_repository=doc_repo, 
+            llm_provider=llm_provider
+        )
+        app.state.ingest_pipeline = IngestPipelineUseCase(
+            ingest_document_use_case=ingest_doc,
+            chunk_document_use_case=chunk_doc,
+            embed_chunks_use_case=embed_chunks
+        )
+        
         yield
     
     # Cleanup on shutdown if needed
@@ -90,7 +114,13 @@ def health():
 # Register the review router
 app.include_router(review_router)
 app.include_router(streaming_router)
+app.include_router(ingest_router)
+app.include_router(trace_router)
 
 # Mount the frontend static directory for testing
 static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "static"))
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+@app.get("/")
+def read_root():
+    return FileResponse(os.path.join(static_dir, "index.html"))

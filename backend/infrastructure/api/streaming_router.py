@@ -54,12 +54,32 @@ async def stream_workflow_progress(
                 "data": json.dumps({"thread_id": thread_id, "message": "Stream connected. Starting workflow."})
             }
 
-            # graph.astream with stream_mode="updates" yields an event each time a node finishes
-            async for event_payload in graph.astream(state, config, stream_mode="updates"):
-                # Check early exit just in case
+            stream_iter = graph.astream(state, config, stream_mode="updates")
+            pending_task = None
+
+            while True:
                 if cancel_event.is_set():
                     break
                 
+                if pending_task is None:
+                    pending_task = asyncio.create_task(anext(stream_iter))
+                
+                done, pending = await asyncio.wait([pending_task], timeout=15.0)
+                
+                if not done:
+                    # Timeout reached, send keep-alive ping
+                    yield {
+                        "event": "ping",
+                        "data": json.dumps({"message": "keep-alive"})
+                    }
+                    continue
+                
+                try:
+                    event_payload = pending_task.result()
+                    pending_task = None
+                except StopAsyncIteration:
+                    break
+
                 # Extract the node name and state update
                 for node_name, updates in event_payload.items():
                     if not isinstance(updates, dict):
@@ -79,8 +99,8 @@ async def stream_workflow_progress(
 
             if not cancel_event.is_set():
                 yield {
-                    "event": "complete",
-                    "data": json.dumps({"status": "completed", "thread_id": thread_id})
+                    "event": "paused_for_review",
+                    "data": json.dumps({"status": "awaiting_approval", "thread_id": thread_id, "message": "Workflow paused. Please review in the Approval Gate."})
                 }
 
         except asyncio.CancelledError:
@@ -149,8 +169,13 @@ async def stream_ask(
         
         try:
             yield {
-                "event": "connected",
-                "data": json.dumps({"message": "Stream connected. Generating answer."})
+                "data": json.dumps({"type": "message", "text": "Stream connected. Generating answer."})
+            }
+            
+            # Yield citations
+            cits = [{"document_id": c.doc_id, "score": c.fused_score} for c in retrieval_result.citations]
+            yield {
+                "data": json.dumps({"type": "citations", "citations": cits})
             }
             
             while True:
@@ -175,13 +200,13 @@ async def stream_ask(
                     break
                     
                 yield {
-                    "event": "token",
-                    "data": chunk
+                    "data": json.dumps({"type": "token", "text": chunk})
                 }
                 
             if not cancel_event.is_set():
+                # Signal completion
                 yield {
-                    "event": "complete",
+                    "event": "done",
                     "data": json.dumps({"status": "completed"})
                 }
                 
