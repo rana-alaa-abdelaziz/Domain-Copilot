@@ -1,0 +1,1 @@
+Backend .NET Developers must know C#, ASP.NET Core, and SQL Server. This is a standard competency requirement.

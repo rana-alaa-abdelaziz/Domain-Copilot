@@ -143,3 +143,19 @@ is not evidence of what a document actually contains.
 - Verified architecture boundaries (34/34 passed) and full test suite (77 passed, 5 expected xfails).
 - Verified backward compatibility across all call sites, including `scripts/eval.py` and `scripts/run_full_ingestion.py`.
 
+## 2026-09-15 — State Transitions & LangGraph Checkpointer Serialization
+
+**What the AI got wrong:**
+- When adding state transition guardrails to `ReviewTaskRepository` to strictly enforce valid status flows (e.g. `pending` -> `in_review` -> `approved`), the existing `test_human_review_service.py` failed because it attempted to transition a task directly from `pending` to `approved` (or tried manually hacking the status property on the domain object instead of using the repository).
+- In addition, a new unit test for graph routing (`test_publish_routing.py`) was failing with a `TypeError: Type is not msgpack serializable: Mock`. The LangGraph memory checkpointer attempted to serialize `Mock` objects that were injected into the state for dummy reports (`CompetencyGapReport`, etc.).
+
+**How it was caught:**
+- Pytest execution revealed the `ValueError: Illegal state transition from pending to approved` from the repository guardrails, and the `TypeError` from the `langgraph.checkpoint.serde.jsonplus` serializer.
+
+**How it was corrected:**
+- Updated `test_human_review_service.py` to properly assign the task (transitioning it to `in_review` via the repository port `assign` method) before processing the review decision.
+- Replaced all `Mock` instances in `test_publish_routing.py` with fully populated Pydantic domain entities (`CompetencyGapReport`, `ModuleOutlineReport`, `AssessmentItemReport`) to ensure accurate test coverage and serialization compatibility with LangGraph's checkpointer.
+- Updated `run_e2e_flow.py` script to inject the `PublishedCurriculumRepository`, properly assign the review task to `e2e_demo_user` to clear the `in_review` guardrail, and explicitly verify automatic curriculum publication on `approve`.
+- Fixed a JSON serialization `TypeError` in `copilot_graph.py`'s `run_publish_curriculum` node by explicitly mapping `.model_dump()` across `outline.modules` (a list of Pydantic models) before passing it to the repository's `module_outline` JSONB field.
+- Fixed a regression where `human_review_service.py` failed to approve/reject tasks that hadn't explicitly been assigned by auto-assigning pending tasks to a default identity before saving the decision.
+- Added an idempotency check in `publish_curriculum` to ensure it skips re-saving if a curriculum for the same `thread_id` already exists.

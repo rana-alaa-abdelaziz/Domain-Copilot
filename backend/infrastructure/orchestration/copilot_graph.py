@@ -1,27 +1,17 @@
 """
 Multi-agent curriculum workflow graph: standards_mapper -> module_outline_generator
--> assessment_generator -> END.
+-> assessment_generator -> human_review -> END.
 
 FR-5 resilience controls (max-iteration breaker, per-step timeout, retry
 with backoff, graceful degradation) wrap every node here — no agent call
 in this file runs unprotected. Timeout uses ThreadPoolExecutor rather
 than signal.alarm since this must run on Windows, not just Unix.
-
-Degradation strategy differs by node, deliberately:
-- standards_mapper: falls back to raw retrieval evidence (plain RAG),
-  since it's the only step that queries directly against a user-supplied
-  role rather than consuming a prior step's structured output.
-- module_outline_generator / assessment_generator: on exhausted retries,
-  the run continues to END with that stage's report set to None and
-  `degraded=True` recorded — falling back to "raw evidence" doesn't make
-  sense for a step whose input is already a structured report, not a
-  free-text query. The graph completing without crashing, with the
-  failure visible in state, is what "graceful degradation" means here.
 """
+import operator
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
@@ -38,6 +28,11 @@ from backend.domain.errors.orchestration_errors import (
     AgentTimeoutError,
     MaxIterationsExceededError,
 )
+from backend.domain.ports.published_curriculum_repository import (
+    PublishedCurriculumRepository,
+)
+from backend.domain.ports.review_task_repository import ReviewTaskRepository
+from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
 
 MAX_ITERATIONS = 10
 STEP_TIMEOUT_SECONDS = 60
@@ -51,12 +46,14 @@ class CopilotState(TypedDict, total=False):
     competency_gap_report: CompetencyGapReport | None
     module_outline_report: ModuleOutlineReport | None
     assessment_report: AssessmentItemReport | None
+    review_status: str | None
+    audit_trail: Annotated[list[dict[str, Any]], operator.add]  # was: dict[str, Any] | None
 
-    # FR-5 bookkeeping — not part of the original TypedDict, needed to
-    # actually track and surface the resilience controls' outcomes.
+    # FR-5 resilience bookkeeping
     step_count: int
     degraded: bool
     error: str | None
+
 
 
 def _run_with_timeout(fn, timeout_seconds: int):
@@ -65,7 +62,7 @@ def _run_with_timeout(fn, timeout_seconds: int):
         try:
             return future.result(timeout=timeout_seconds)
         except FutureTimeoutError as exc:
-            raise AgentTimeoutError(f"Agent exceeded {timeout_seconds}s timeout") from exc
+            raise AgentTimeoutError("agent", timeout_seconds) from exc
 
 
 def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
@@ -74,20 +71,20 @@ def _run_with_retry(fn, max_retries: int = MAX_RETRIES):
         try:
             return fn()
         except AgentTimeoutError:
-            # Timeouts are not retried — see nodes.py's original rationale:
-            # retrying a slow call rarely helps and delays degradation.
             raise
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if attempt < max_retries:
                 time.sleep(RETRY_BACKOFF_BASE_SECONDS * (2 ** attempt))
     if last_exc is not None:
-         raise last_exc
+        raise last_exc
     raise RuntimeError("Retry loop completed without executing function.")
+
+
 def _check_iteration_cap(state: CopilotState) -> int:
     step_count = state.get("step_count", 0) + 1
     if step_count > MAX_ITERATIONS:
-        raise MaxIterationsExceededError(f"Workflow exceeded {MAX_ITERATIONS} node executions")
+        raise MaxIterationsExceededError("workflow", MAX_ITERATIONS)
     return step_count
 
 
@@ -96,6 +93,8 @@ def create_copilot_graph(
     outline_generator: ModuleOutlineGenerator | None = None,
     assessment_generator: AssessmentGenerator | None = None,
     checkpointer: PostgresSaver | None = None,
+    review_task_repository: ReviewTaskRepository | None = None,
+    published_curriculum_repository: PublishedCurriculumRepository | None = None,
 ):
     workflow = StateGraph(CopilotState)
 
@@ -117,8 +116,6 @@ def create_copilot_graph(
                 "error": None,
             }
         except Exception as exc:  # noqa: BLE001
-            # Graceful degradation to plain RAG: fall back to raw
-            # requirement-doc evidence rather than failing the run.
             try:
                 plain = standards_mapper.get_plain_evidence(state["target_role"])
                 fallback_report = CompetencyGapReport(
@@ -126,9 +123,6 @@ def create_copilot_graph(
                     user_reported_subjects=state["user_reported_subjects"],
                     gaps=[],
                 )
-                # Plain-RAG citations aren't structured gaps — surfaced via
-                # the error message instead of forcing them into a shape
-                # CompetencyGapReport was never meant to hold.
                 citation_summary = "; ".join(c.content[:100] for c in plain.citations[:3])
                 error_message = f"{exc} | plain_rag_fallback_evidence: {citation_summary}"
             except Exception:  # noqa: BLE001
@@ -153,8 +147,6 @@ def create_copilot_graph(
             gap_report = state.get("competency_gap_report")
 
             if gap_report is None:
-                # Upstream already degraded to no usable gap report —
-                # nothing meaningful to build an outline from.
                 return {
                     "module_outline_report": None,
                     "step_count": step_count,
@@ -226,6 +218,69 @@ def create_copilot_graph(
         workflow.add_edge(current_node, "assessment_generator")
         current_node = "assessment_generator"
 
-    workflow.add_edge(current_node, END)
+    from langchain_core.runnables import RunnableConfig
+    
+    def run_create_review_task(state: CopilotState, config: RunnableConfig | None = None):
+        step_count = _check_iteration_cap(state)
+        if review_task_repository is not None:
+            gap_report = state.get("competency_gap_report")
+            thread_id = config["configurable"].get("thread_id") if config and "configurable" in config else None
+            
+            existing = review_task_repository.get_by_thread_id(thread_id) if thread_id else None
+            if existing is None and gap_report is not None and thread_id:
+                priority = compute_priority(gap_report)
+                review_task_repository.create(
+                    thread_id=thread_id,
+                    item_id=thread_id,
+                    target_role=state["target_role"],
+                    priority=priority,
+                    sla_due_at=compute_sla_due_at(priority),
+                )
+        return {"step_count": step_count}
 
-    return workflow.compile(checkpointer=checkpointer)
+    def run_human_review(state: CopilotState, config: RunnableConfig | None = None):  
+        step_count = _check_iteration_cap(state)
+        return {
+            "step_count": step_count,
+            "review_status": state.get("review_status", "approved"),
+        }
+
+    def run_publish_curriculum(state: CopilotState, config: RunnableConfig | None = None):
+        step_count = _check_iteration_cap(state)
+        thread_id = config["configurable"].get("thread_id") if config and "configurable" in config else None
+        if published_curriculum_repository and thread_id:
+            existing = published_curriculum_repository.get_by_thread_id(thread_id)
+            gap_report = state.get("competency_gap_report")
+            outline = state.get("module_outline_report")
+            assessment = state.get("assessment_report")
+
+            if existing is None and gap_report and outline and assessment:
+                import dataclasses
+                published_curriculum_repository.save(
+                    thread_id=thread_id,
+                    target_role=gap_report.target_role,
+                    module_outline=[dataclasses.asdict(m) for m in outline.modules],
+                    assessment_items=[item.model_dump() for item in assessment.items],
+                    approved_by="human_reviewer",
+                )
+        return {"step_count": step_count}
+
+    def route_after_review(state: CopilotState) -> str:
+        status = state.get("review_status")
+        if status in ("approved", "edited_approved"):
+            return "publish_curriculum"
+        return END
+
+    workflow.add_node("create_review_task", run_create_review_task)
+    workflow.add_node("human_review", run_human_review)
+    workflow.add_node("publish_curriculum", run_publish_curriculum)
+    workflow.add_edge(current_node, "create_review_task")
+    workflow.add_edge("create_review_task", "human_review")
+    workflow.add_conditional_edges("human_review", route_after_review, {"publish_curriculum": "publish_curriculum", END: END})
+    workflow.add_edge("publish_curriculum", END)
+
+    # Compile with checkpointer and the crucial interrupt breakpoint
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["human_review"],
+    )

@@ -19,6 +19,9 @@ RESTRICTED_IMPORTS = {
     "psycopg",
     "requests",
     "httpx",
+    "langgraph",
+    "langchain_core",
+    "langchain",
 }
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
