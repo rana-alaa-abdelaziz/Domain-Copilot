@@ -1,4 +1,3 @@
-import re
 
 with open(r'backend/infrastructure/orchestration/copilot_graph.py', 'r', encoding='utf-8') as f:
     content = f.read()

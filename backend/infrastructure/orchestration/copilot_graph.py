@@ -7,14 +7,11 @@ with backoff, graceful degradation) wrap every node here — no agent call
 in this file runs unprotected. Timeout uses ThreadPoolExecutor rather
 than signal.alarm since this must run on Windows, not just Unix.
 """
-from backend.domain.ports import review_task_repository
 import operator
 import time
-from typing import Annotated
-
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
@@ -33,7 +30,6 @@ from backend.domain.errors.orchestration_errors import (
 )
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
-
 
 MAX_ITERATIONS = 10
 STEP_TIMEOUT_SECONDS = 60
@@ -55,9 +51,6 @@ class CopilotState(TypedDict, total=False):
     degraded: bool
     error: str | None
 
-    # Human-in-the-Loop review tracking & audit trail
-    review_status: str | None
-    audit_trail: dict[str, Any] | None
 
 
 def _run_with_timeout(fn, timeout_seconds: int):

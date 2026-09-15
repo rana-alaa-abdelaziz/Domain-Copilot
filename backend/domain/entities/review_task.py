@@ -6,7 +6,6 @@ approve/reject/edit-with-comment. No SQLAlchemy, no LangGraph imports.
 from dataclasses import dataclass
 from datetime import datetime
 
-
 REVIEW_TASK_STATUSES = {
     "pending", "in_review", "approved", "rejected", "edited_approved", "escalated",
 }

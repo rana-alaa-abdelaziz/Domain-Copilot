@@ -9,6 +9,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from langgraph.checkpoint.postgres import PostgresSaver
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from backend.application.agents.assessment_generator import AssessmentGenerator
 from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
@@ -19,15 +21,15 @@ from backend.application.use_cases.human_review_service import HumanReviewServic
 
 # Infrastructure adapters & use cases
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
-from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
-from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
 
 # Import your repository/vector store adapters here if needed, e.g.:
 # from backend.infrastructure.persistence.postgres_vector_store import PostgresVectorStore
 # from backend.infrastructure.persistence.postgres_keyword_search import PostgresKeywordSearch
-from backend.infrastructure.db.repositories.review_task_repository import SqlAlchemyReviewTaskRepository
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from backend.infrastructure.db.repositories.review_task_repository import (
+    SqlAlchemyReviewTaskRepository,
+)
+from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
 
 
 def main():

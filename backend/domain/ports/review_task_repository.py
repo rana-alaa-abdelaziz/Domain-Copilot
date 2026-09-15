@@ -5,6 +5,7 @@ checkpoint blob nobody can list without already knowing a thread_id.
 """
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Any
 
 from backend.domain.entities.review_task import ReviewTask
 
@@ -42,3 +43,6 @@ class ReviewTaskRepository(ABC):
     def list_overdue(self) -> list[ReviewTask]:
         """Tasks past sla_due_at still in 'pending'/'in_review' —
         input to the escalation job."""
+    @abstractmethod
+    def get_reviewer_stats(self) -> dict[str, Any]:
+        """Calculates and returns aggregated reviewer metrics."""

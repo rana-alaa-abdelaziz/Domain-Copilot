@@ -1,13 +1,13 @@
 """
 FastAPI router for managing the Human-in-the-Loop review queue.
 """
-from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from backend.application.use_cases.human_review_service import HumanReviewService
+from backend.domain.ports.review_task_repository import ReviewTaskRepository
 
 router = APIRouter(prefix="/api/reviews", tags=["Human Review Queue"])
 
@@ -123,3 +123,20 @@ def assign_review(
         raise HTTPException(status_code=404, detail=f"No review task for thread '{thread_id}'")
     review_task_repo.assign(task.review_task_id, payload.reviewer_id)
     return {"thread_id": thread_id, "assigned_reviewer_id": payload.reviewer_id}
+    
+@router.get("/stats/all", status_code=status.HTTP_200_OK)
+def get_reviewer_statistics(
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+):
+    """
+    Retrieves aggregated reviewer statistics including tasks processed,
+    approval rates, and rejection breakdowns per reviewer (T5 requirement).
+    """
+    try:
+        stats = review_task_repo.get_reviewer_stats()
+        return {"reviewer_statistics": stats}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch reviewer statistics: {exc}",
+        ) from exc

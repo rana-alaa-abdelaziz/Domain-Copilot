@@ -4,18 +4,19 @@ PostgresSaver and a real ReviewTaskRepository, not a mock. This replaces
 test_item_generator_approval_gate.py's SubmitForReview-based contract,
 which tested a mechanism the real implementation never uses.
 """
+import pytest
 from langgraph.checkpoint.postgres import PostgresSaver
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from backend.application.use_cases.human_review_service import HumanReviewService
+from backend.infrastructure.db.models import Base
 from backend.infrastructure.db.repositories.review_task_repository import (
     SqlAlchemyReviewTaskRepository,
 )
 from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from backend.tests.db_test_utils import ensure_test_db_exists, get_test_db_url
-from backend.infrastructure.db.models import Base
+
 
 @pytest.fixture
 def test_db_url():

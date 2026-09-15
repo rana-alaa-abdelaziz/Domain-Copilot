@@ -11,34 +11,38 @@ It will:
 4. Run the workflow and pause for human approval.
 """
 
+import logging
 import os
 import uuid
-import logging
 from pathlib import Path
 
+from langgraph.checkpoint.postgres import PostgresSaver
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from langgraph.checkpoint.postgres import PostgresSaver
 
-from backend.infrastructure.db.models import Base
-from backend.infrastructure.db.repositories.document_repository import SqlAlchemyDocumentRepository
-from backend.infrastructure.db.repositories.chunk_repository import SqlAlchemyChunkRepository
-from backend.infrastructure.db.repositories.review_task_repository import SqlAlchemyReviewTaskRepository
-from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
-from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
-from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
-
-from backend.application.use_cases.ingest_document import IngestDocumentUseCase
+from backend.application.agents.assessment_generator import AssessmentGenerator
+from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
+from backend.application.agents.standards_mapper import StandardsMapper
 from backend.application.use_cases.chunk_document import ChunkDocumentUseCase
 from backend.application.use_cases.embed_chunks import EmbedChunksUseCase
-from backend.application.use_cases.ingest_pipeline import IngestPipelineUseCase
-from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
-
-from backend.application.agents.standards_mapper import StandardsMapper
-from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
-from backend.application.agents.assessment_generator import AssessmentGenerator
-from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
 from backend.application.use_cases.human_review_service import HumanReviewService
+from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
+from backend.application.use_cases.ingest_document import IngestDocumentUseCase
+from backend.application.use_cases.ingest_pipeline import IngestPipelineUseCase
+from backend.infrastructure.db.models import Base
+from backend.infrastructure.db.repositories.chunk_repository import (
+    SqlAlchemyChunkRepository,
+)
+from backend.infrastructure.db.repositories.document_repository import (
+    SqlAlchemyDocumentRepository,
+)
+from backend.infrastructure.db.repositories.review_task_repository import (
+    SqlAlchemyReviewTaskRepository,
+)
+from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
+from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
+from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -91,7 +95,7 @@ def run_e2e():
             doc_category="competency"
         )
         print(f"✅ Ingestion successful! Doc ID: {pipeline_result.ingestion.document.doc_id}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"⚠️ Ingestion failed: {e}")
         return
         
@@ -133,7 +137,7 @@ def run_e2e():
         
         print("\n...Streaming graph steps...")
         for event in graph.stream(initial_state, config):
-            for k, v in event.items():
+            for k in event:
                 print(f"--- Completed Node: {k} ---")
                 
         # Check if paused
@@ -160,10 +164,10 @@ def run_e2e():
 
             task = review_repo.get_by_thread_id(thread_id)
             if task:
-                print(f"Review Task Details:")
+                print("Review Task Details:")
                 print(f"  - Target Role: {task.target_role}")
                 print(f"  - Status: {task.status}")
-                print(f"  - Action Needed: Review the generated assessment plan.")
+                print("  - Action Needed: Review the generated assessment plan.")
                 
             print("\nPress Enter to APPROVE, type 'reject' to reject, or type 'edit_with_comment'.")
             user_input = input("> ").strip().lower()
@@ -193,7 +197,7 @@ def run_e2e():
                 if action == 'approve':
                     print(f"Assessment Items Generated: {len(assessment_report.items) if assessment_report else 0}")
                 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"Error during human review process: {e}")
                 
         else:
