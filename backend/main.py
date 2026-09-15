@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import create_engine
@@ -10,23 +11,26 @@ from sqlalchemy.orm import sessionmaker
 from backend.application.agents.assessment_generator import AssessmentGenerator
 from backend.application.agents.module_outline_generator import ModuleOutlineGenerator
 from backend.application.agents.standards_mapper import StandardsMapper
-from backend.application.use_cases.human_review_service import HumanReviewService
-from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
 from backend.application.use_cases.chunk_document import ChunkDocumentUseCase
 from backend.application.use_cases.embed_chunks import EmbedChunksUseCase
+from backend.application.use_cases.human_review_service import HumanReviewService
+from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
 from backend.application.use_cases.ingest_document import IngestDocumentUseCase
 from backend.application.use_cases.ingest_pipeline import IngestPipelineUseCase
+from backend.infrastructure.api.ingest_router import router as ingest_router
 from backend.infrastructure.api.review_router import router as review_router
 from backend.infrastructure.api.streaming_router import router as streaming_router
-from backend.infrastructure.api.ingest_router import router as ingest_router
 from backend.infrastructure.api.trace_router import router as trace_router
 from backend.infrastructure.config import get_llm_provider
+from backend.infrastructure.db.repositories.chunk_repository import (
+    SqlAlchemyChunkRepository,
+)
+from backend.infrastructure.db.repositories.document_repository import (
+    SqlAlchemyDocumentRepository,
+)
 from backend.infrastructure.db.repositories.review_task_repository import (
     SqlAlchemyReviewTaskRepository,
 )
-from backend.infrastructure.db.repositories.chunk_repository import SqlAlchemyChunkRepository
-from backend.infrastructure.db.repositories.document_repository import SqlAlchemyDocumentRepository
-from fastapi.responses import FileResponse
 from backend.infrastructure.orchestration.copilot_graph import create_copilot_graph
 from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
 from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore

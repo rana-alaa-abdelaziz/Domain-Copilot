@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Request, UploadFile
 router = APIRouter(prefix="/api/ingest", tags=["Ingestion"])
 
 @router.post("/file")
-async def ingest_file(request: Request, file: UploadFile = File(...)):
+def ingest_file(request: Request, file: UploadFile = File(...)):  # noqa: B008
     """
     Upload a document (PDF, etc.) for ingestion.
     """
