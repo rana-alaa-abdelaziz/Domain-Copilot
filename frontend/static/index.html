@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Copilot UI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Domain Copilot</h1>
+        
+        <!-- 1. Ingest Section -->
+        <div class="section" id="ingest-section">
+            <h2>1. Ingest Documents</h2>
+            <form id="ingest-form">
+                <input type="file" id="ingest-file" required>
+                <button type="submit">Upload & Ingest</button>
+            </form>
+            <div id="ingest-result"></div>
+        </div>
+
+        <!-- 2. Ask with Citations Section -->
+        <div class="section" id="ask-section">
+            <h2>2. Ask with Citations</h2>
+            <div class="chat-box" id="ask-chat"></div>
+            <form id="ask-form">
+                <input type="text" id="ask-input" placeholder="Ask a question..." required style="width: 70%;">
+                <button type="submit">Ask</button>
+            </form>
+        </div>
+
+        <!-- 3. Run Workflow Section -->
+        <div class="section" id="workflow-section">
+            <h2>3. Run Workflow</h2>
+            <form id="workflow-form">
+                <input type="text" id="wf-role" placeholder="Target Role (e.g. Developer)" required>
+                <input type="text" id="wf-subjects" placeholder="Subjects (comma separated)">
+                <button type="submit">Start Workflow</button>
+                <button type="button" id="wf-cancel" disabled style="background: red; margin-left: 10px;">Cancel</button>
+            </form>
+            <div class="log-box" id="wf-log"></div>
+        </div>
+
+        <!-- 4. Approval Gate Section -->
+        <div class="section" id="approval-section">
+            <h2>4. Approval Gate</h2>
+            <button id="refresh-tasks">Refresh Pending Tasks</button>
+            <table id="tasks-table">
+                <thead>
+                    <tr>
+                        <th>Thread ID</th>
+                        <th>Target Role</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+
+            <div id="review-panel" class="hidden" style="margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px;">
+                <h3>Review Task <span id="review-thread-id"></span></h3>
+                <div class="log-box" id="review-content" style="height: 300px;"></div>
+                
+                <div style="margin-top: 10px;">
+                    <label>Instructor Comment (Optional):</label><br>
+                    <textarea id="review-comment" style="width: 100%; height: 60px;"></textarea>
+                </div>
+                
+                <div style="margin-top: 10px;">
+                    <button onclick="submitReview('approve')" style="background: green;">Approve</button>
+                    <button onclick="submitReview('reject')" style="background: red;">Reject</button>
+                    <button onclick="submitReview('edit_with_comment')" style="background: orange;">Edit w/ Comment</button>
+                    <button onclick="closeReview()" style="background: gray;">Close</button>
+                </div>
+            </div>
+            
+            <h3 style="margin-top: 40px;">Reviewed Tasks (Completed)</h3>
+            <table id="completed-tasks-table">
+                <thead>
+                    <tr>
+                        <th>Thread ID</th>
+                        <th>Target Role</th>
+                        <th>Status</th>
+                        <th>Comment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 5. View Trace Section -->
+
+        <div class="section" id="trace-section">
+            <h2>5. View Trace</h2>
+            <form id="trace-form">
+                <input type="text" id="trace-thread-id" placeholder="Thread ID" required>
+                <button type="submit">Fetch Trace</button>
+            </form>
+            <div class="log-box" id="trace-result"></div>
+        </div>
+    </div>
+
+    <!-- Marked library for Markdown parsing in chat -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
