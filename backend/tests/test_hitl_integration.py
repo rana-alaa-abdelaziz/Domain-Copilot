@@ -49,6 +49,7 @@ class MockHITLWorkflowService:
         action: str,
         instructor_comment: str | None = None,
         edited_artifacts: dict | None = None,
+        reviewer_id: str = "system_auto_assign",
     ):
         if thread_id not in self.threads:
             raise ValueError(f"Thread '{thread_id}' not found.")

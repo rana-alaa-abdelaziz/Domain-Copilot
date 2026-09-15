@@ -22,6 +22,9 @@ class ReviewDecisionRequest(BaseModel):
     edited_artifacts: dict[str, Any] | None = Field(
         None, description="Optional modified reports if editing during review"
     )
+    reviewer_id: str | None = Field(
+        None, description="Optional identity of the reviewer making the decision"
+    )
 
 
 def get_review_service(request: Request) -> HumanReviewService:
@@ -84,6 +87,7 @@ def submit_review_decision(
             action=payload.action,
             instructor_comment=payload.instructor_comment,
             edited_artifacts=payload.edited_artifacts,
+            reviewer_id=payload.reviewer_id or "system_auto_assign",
         )
         return response
     except ValueError as val_err:

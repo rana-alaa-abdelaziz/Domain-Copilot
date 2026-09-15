@@ -12,7 +12,7 @@ app.include_router(review_router)
 
 # Mock review service to satisfy dependency injection during tests
 class MockReviewService:
-    def process_review_decision(self, thread_id: str, action: str, instructor_comment=None, edited_artifacts=None):
+    def process_review_decision(self, thread_id: str, action: str, instructor_comment=None, edited_artifacts=None, reviewer_id=None):
         if action not in ["approve", "reject", "edit_with_comment"]:
             raise ValueError(f"Invalid review action '{action}'.")
         return {"thread_id": thread_id, "status": "completed"}

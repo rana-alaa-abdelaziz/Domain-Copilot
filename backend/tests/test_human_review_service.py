@@ -70,6 +70,37 @@ def test_approve_resumes_graph_and_marks_review_task_approved(pg_session, test_d
         assert graph.get_state(config).next == ()  # graph actually completed
 
 
+def test_process_review_decision_auto_assigns_pending_tasks(pg_session, test_db_url):
+    psycopg_url = test_db_url.replace("postgresql+psycopg2://", "postgresql://")
+    with PostgresSaver.from_conn_string(psycopg_url) as checkpointer:
+        checkpointer.setup()
+        review_repo = SqlAlchemyReviewTaskRepository(pg_session)
+        
+        standards_mapper = DummyStandardsMapper()
+        
+        graph = create_copilot_graph(
+            standards_mapper=standards_mapper, 
+            checkpointer=checkpointer, 
+            review_task_repository=review_repo
+        )
+        import uuid
+        thread_id = f"test-autoassign-{uuid.uuid4()}"
+        config = {"configurable": {"thread_id": thread_id}}
+        graph.invoke({"target_role": "X", "user_reported_subjects": []}, config)
+
+        task = review_repo.get_by_thread_id(thread_id)
+        assert task.status == "pending"
+        # We do NOT assign it here. It should be auto-assigned by the service.
+
+        service = HumanReviewService(graph, review_repo)
+        service.process_review_decision(thread_id, action="approve", reviewer_id="real_reviewer_123")
+        
+        task = review_repo.get_by_thread_id(thread_id)
+        assert task.status == "approved"
+        assert task.assigned_reviewer_id == "real_reviewer_123"
+        assert graph.get_state(config).next == ()  # graph actually completed
+
+
 def test_reject_does_not_resume_graph_and_marks_review_task_rejected(pg_session, test_db_url):
     # mirrors the manual reject test I ran earlier — assert next == ("human_review",)
     # stays paused, and task.status == "rejected"
