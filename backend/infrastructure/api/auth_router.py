@@ -10,7 +10,7 @@ from backend.infrastructure.db.repositories.user_repository import (
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-@router.post("/token", status_code=status.HTTP_200_OK)
+@router.post("/login", status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute")
 def login(
     request: Request,

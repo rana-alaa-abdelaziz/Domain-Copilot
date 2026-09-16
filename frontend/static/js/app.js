@@ -9,6 +9,16 @@ function parseJwt(token) {
     }
 }
 
+function escapeHTML(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function updateAuthUI() {
     if (currentToken) {
         const payload = parseJwt(currentToken);
@@ -111,8 +121,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileInput = document.getElementById('ingest-file');
         if (!fileInput.files.length) return;
         
+        const categorySelect = document.getElementById('ingest-category');
+        
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
+        formData.append('doc_category', categorySelect.value);
         
         ingestResult.textContent = "Uploading and ingesting...";
         try {
@@ -190,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const currentText = botMsgDiv.getAttribute("data-raw") || "";
                             const newText = currentText + jsonData.text;
                             botMsgDiv.setAttribute("data-raw", newText);
-                            botMsgDiv.innerHTML = marked.parse(newText);
+                            botMsgDiv.innerHTML = marked.parse(escapeHTML(newText));
                         }
                     } else if (line.startsWith('event: done')) {
                         // done
@@ -282,6 +295,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else if (currentEvent === 'error') {
                             wfLog.textContent += `[Error] ${dataStr}\n`;
                             wfCancel.disabled = true;
+                        } else if (currentEvent === 'ping') {
+                            const jsonData = JSON.parse(dataStr);
+                            wfLog.textContent += `[Working...] ${jsonData.message}\n`;
                         }
                         
                         wfLog.scrollTop = wfLog.scrollHeight;
@@ -382,9 +398,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.competency_gap_report.gaps.forEach(gap => {
                     const statusColor = gap.coverage_source === 'unverified' ? '#cc0000' : '#0066cc';
                     html += `<div style="margin-bottom: 10px; padding: 10px; background: #f0f0f0; border-left: 4px solid ${statusColor};">
-                        <strong>${gap.competency}</strong><br>
-                        <em>Coverage: ${gap.coverage_source} | Severity: ${gap.severity}</em><br>
-                        <span style="font-size: 0.9em; color: #555;">Matched Subject: ${gap.matched_user_subject || 'None'}</span>
+                        <strong>${escapeHTML(gap.competency)}</strong><br>
+                        <em>Coverage: ${escapeHTML(gap.coverage_source)} | Severity: ${escapeHTML(gap.severity)}</em><br>
+                        <span style="font-size: 0.9em; color: #555;">Matched Subject: ${escapeHTML(gap.matched_user_subject || 'None')}</span>
                     </div>`;
                 });
             } else {
@@ -395,20 +411,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.assessment_report && data.assessment_report.items) {
                 data.assessment_report.items.forEach((item, idx) => {
                     html += `<div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
-                        <strong>Q${idx + 1}: ${item.question_text}</strong><br>`;
+                        <strong>Q${idx + 1}: ${escapeHTML(item.question_text)}</strong><br>`;
                     
                     if (item.question_type === 'multiple_choice' && item.options) {
                         html += `<ul>`;
                         item.options.forEach(opt => {
                             const isCorrect = opt === item.correct_answer;
-                            html += `<li style="${isCorrect ? 'color: green; font-weight: bold;' : ''}">${opt}${isCorrect ? ' (Correct)' : ''}</li>`;
+                            html += `<li style="${isCorrect ? 'color: green; font-weight: bold;' : ''}">${escapeHTML(opt)}${isCorrect ? ' (Correct)' : ''}</li>`;
                         });
                         html += `</ul>`;
                     } else {
-                        html += `<strong>Correct Answer:</strong> ${item.correct_answer}<br>`;
+                        html += `<strong>Correct Answer:</strong> ${escapeHTML(item.correct_answer)}<br>`;
                     }
-                    html += `<span style="font-size: 0.9em; color: #555;"><strong>Rationale:</strong> ${item.rationale}</span><br>`;
-                    html += `<span style="font-size: 0.8em; color: #888;">Competency Tested: ${item.competency} (${item.difficulty})</span>`;
+                    html += `<span style="font-size: 0.9em; color: #555;"><strong>Rationale:</strong> ${escapeHTML(item.rationale)}</span><br>`;
+                    html += `<span style="font-size: 0.8em; color: #888;">Competency Tested: ${escapeHTML(item.competency)} (${escapeHTML(item.difficulty)})</span>`;
                     html += `</div>`;
                 });
             } else {

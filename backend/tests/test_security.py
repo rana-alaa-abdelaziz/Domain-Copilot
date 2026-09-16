@@ -36,7 +36,7 @@ def test_rate_limit_token_endpoint():
     responses = []
     for _ in range(10):
         # Using invalid creds is fine, it will return 401 or 400 but count against rate limit
-        resp = client.post("/api/auth/token", data={"username": "test", "password": "x"})
+        resp = client.post("/api/auth/login", data={"username": "test", "password": "x"})
         responses.append(resp.status_code)
     
     # slowapi should block after 5

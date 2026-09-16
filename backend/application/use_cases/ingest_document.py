@@ -76,6 +76,10 @@ class IngestDocumentUseCase:
         existing = self._repository.get_by_hash(file_hash)
         if existing is not None:
             # Idempotent re-ingestion: identical content, short-circuit
+            if doc_category is not None and existing.doc_category != doc_category:
+                existing.doc_category = doc_category
+                existing.updated_at = datetime.now(timezone.utc)
+                self._repository.save_document(existing)
             return IngestionResult(document=existing, pages=[], was_skipped=True)
 
         extractor = self._extractors.get(file_path.suffix.lower())
