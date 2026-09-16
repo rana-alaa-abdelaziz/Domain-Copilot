@@ -133,7 +133,7 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
         )
     def get_reviewer_stats(self) -> dict[str, Any]:
         """Aggregates review metrics grouped by assigned reviewer."""
-        from sqlalchemy import func, case
+        from sqlalchemy import case, func
 
         from backend.infrastructure.db.models import ReviewTaskStatusEnum
 
