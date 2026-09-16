@@ -211,6 +211,7 @@ Grounded Answer:"""
                 "data": json.dumps({"type": "citations", "citations": cits})
             }
             
+            full_response = ""
             while True:
                 if cancel_event.is_set():
                     break
@@ -232,6 +233,7 @@ Grounded Answer:"""
                     }
                     break
                     
+                full_response += chunk
                 yield {
                     "data": json.dumps({"type": "token", "text": chunk})
                 }
@@ -243,11 +245,62 @@ Grounded Answer:"""
                     "data": json.dumps({"status": "completed"})
                 }
                 
+                # Save to database
+                db_session = request.app.state.db_session
+                try:
+                    from backend.infrastructure.db.models import ChatMessageModel
+                    # Save User message
+                    user_msg = ChatMessageModel(
+                        user_id=current_user.user_id,
+                        role="user",
+                        content=query,
+                    )
+                    db_session.add(user_msg)
+                    
+                    # Save Assistant message
+                    assistant_msg = ChatMessageModel(
+                        user_id=current_user.user_id,
+                        role="assistant",
+                        content=full_response,
+                        citations=cits
+                    )
+                    db_session.add(assistant_msg)
+                    db_session.commit()
+                except Exception as db_err:  # noqa: BLE001
+                    print(f"Error saving chat history: {db_err}")
+                    db_session.rollback()
+                
         except asyncio.CancelledError:
             cancel_event.set()
             print("Client disconnected during /ask streaming.")
             raise
         finally:
             watcher.cancel()
-            
     return EventSourceResponse(event_generator())
+
+@router.get("/history")
+def get_chat_history(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve the chronological list of chat messages for the current user.
+    """
+    db_session = request.app.state.db_session
+    from backend.infrastructure.db.models import ChatMessageModel
+    
+    messages = db_session.query(ChatMessageModel).filter(
+        ChatMessageModel.user_id == current_user.user_id
+    ).order_by(ChatMessageModel.created_at.asc()).all()
+    
+    result = []
+    for m in messages:
+        result.append({
+            "message_id": str(m.message_id),
+            "role": m.role,
+            "content": m.content,
+            "citations": m.citations,
+            "created_at": m.created_at.isoformat()
+        })
+        
+    return {"messages": result}

@@ -47,7 +47,8 @@ class FakeRetrieveUseCase:
             chunk_id = "c1"
         
         class Result:
-            citations = [Citation()]
+            def __init__(self):
+                self.citations = [Citation()]
             
         return Result()
 

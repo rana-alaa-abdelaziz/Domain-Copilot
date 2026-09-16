@@ -19,6 +19,7 @@ def _make_citation(chunk_id: str, content: str) -> Citation:
         fused_score=0.9,
         dense_rank=1,
         keyword_rank=1,
+        source="test",
     )
 
 

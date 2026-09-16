@@ -34,7 +34,7 @@ with Connection.connect("postgresql://postgres:postgres@localhost:5432/domain_co
                 try:
                     import json
                     print(json.dumps(assess.model_dump(), indent=2))
-                except:
+                except Exception:  # noqa: BLE001
                     print("items:", getattr(assess, "items", None))
         else:
             print("No assessment_report")

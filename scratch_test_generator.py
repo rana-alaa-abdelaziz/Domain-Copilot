@@ -11,9 +11,6 @@ from backend.domain.entities.competency_gap_report import (
     CompetencyGapReport,
 )
 from backend.infrastructure.config import get_instrumented_llm_provider
-from backend.infrastructure.db.repositories.document_repository import (
-    SqlAlchemyDocumentRepository,
-)
 from backend.infrastructure.vectorstore.pg_keyword_search import PgKeywordSearch
 from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 
@@ -21,7 +18,6 @@ from backend.infrastructure.vectorstore.pgvector_store import PgVectorStore
 async def main():
     engine = create_engine("postgresql://postgres:postgres@localhost:5432/domain_copilot")
     with Session(engine) as session:
-        doc_repo = SqlAlchemyDocumentRepository(session)
         vec_store = PgVectorStore(session)
         kw_search = PgKeywordSearch(session)
         

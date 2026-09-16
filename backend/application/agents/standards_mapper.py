@@ -186,7 +186,7 @@ class StandardsMapper:
                     sim = cosine_similarity(subject_embedding, skill_embedding)
                     if sim > 0.70:  # Use a slightly higher threshold for direct comparison
                         return subject
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Embedding fallback failed: {e}")
 
         return None
