@@ -34,7 +34,7 @@ def ingest_file(
         # Execute ingestion pipeline
         result = pipeline.execute(
             file_path=temp_path,
-            source="UI Upload",
+            source=file.filename or "UI Upload",
             version="1.0",
             doc_category=doc_category
         )
