@@ -229,7 +229,6 @@ class StandardsMapper:
         llm_output = self._llm_provider.complete(
             prompt=prompt,
             cancel_event=cancel_event,
-            options={"temperature": 0.0, "num_ctx": 2048},
         )
         extracted_skills = self._parse_skills_list(llm_output)
 

@@ -35,6 +35,7 @@ from backend.domain.ports.published_curriculum_repository import (
 )
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
+from backend.infrastructure.api.correlation_middleware import set_current_agent
 
 MAX_ITERATIONS = 10
 STEP_TIMEOUT_SECONDS = 300
@@ -113,11 +114,15 @@ def create_copilot_graph(
         cancel_event = config.get("configurable", {}).get("cancel_event") if config else None
 
         def _call():
-            return standards_mapper.run(
-                target_role=state["target_role"],
-                user_reported_subjects=state["user_reported_subjects"],
-                cancel_event=cancel_event,
-            )
+            set_current_agent("standards_mapper")
+            try:
+                return standards_mapper.run(
+                    target_role=state["target_role"],
+                    user_reported_subjects=state["user_reported_subjects"],
+                    cancel_event=cancel_event,
+                )
+            finally:
+                set_current_agent(None)
 
         try:
             report = _run_with_retry(lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS, cancel_event))
@@ -170,7 +175,11 @@ def create_copilot_graph(
                 }
 
             def _call():
-                return outline_generator.generate_outline(gap_report, cancel_event=cancel_event)
+                set_current_agent("module_outline_generator")
+                try:
+                    return outline_generator.generate_outline(gap_report, cancel_event=cancel_event)
+                finally:
+                    set_current_agent(None)
 
             try:
                 outline_report = _run_with_retry(
@@ -212,7 +221,11 @@ def create_copilot_graph(
                 }
 
             def _call():
-                return assessment_generator.generate_items(gap_report, cancel_event=cancel_event)
+                set_current_agent("assessment_generator")
+                try:
+                    return assessment_generator.generate_items(gap_report, cancel_event=cancel_event)
+                finally:
+                    set_current_agent(None)
 
             try:
                 assessment_report = _run_with_retry(
