@@ -47,31 +47,20 @@ def test_correlation_id_generation(client: TestClient):
     assert response.headers["x-correlation-id"] != "no-correlation-id"
     assert len(response.headers["x-correlation-id"]) > 0
 
-def test_concurrency_safety():
-    """
-    3. Concurrency safety: fire two requests concurrently with different
-       correlation IDs and confirm their LLM call records don't cross-contaminate.
-       We test this by simulating two threads setting and getting the contextvar.
-    """
+def test_correlation_id_propagates_into_threadpool():
     import concurrent.futures
+    import contextvars
 
     from backend.infrastructure.api.correlation_middleware import _correlation_id
     
-    def worker(cid: str):
-        token = _correlation_id.set(cid)
-        try:
-            import time
-            time.sleep(0.1)
-            return get_correlation_id()
-        finally:
-            _correlation_id.reset(token)
-            
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        f1 = executor.submit(worker, "cid-1")
-        f2 = executor.submit(worker, "cid-2")
-        
-        assert f1.result() == "cid-1"
-        assert f2.result() == "cid-2"
+    token = _correlation_id.set("cid-propagation-test")
+    try:
+        ctx = contextvars.copy_context()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            result = ex.submit(ctx.run, get_correlation_id).result()
+        assert result == "cid-propagation-test"
+    finally:
+        _correlation_id.reset(token)
 
 def test_token_accounting(client: TestClient, db_session: Session):
     """

@@ -31,16 +31,24 @@ class AccountingProvider(LlmProvider):
         self._repository = repository
 
     def _get_context_info(self) -> tuple[str | None, str | None]:
+        """
+        Attempts to pull thread_id from langgraph's config if we are inside a graph node,
+        and agent_name from the correlation middleware contextvar.
+        """
         thread_id = None
-        agent_name = None
         
-        # Try to extract from LangGraph context if available
-        if var_child_runnable_config is not None:
-            config = var_child_runnable_config.get()
-            if config:
-                configurable = config.get("configurable", {})
-                thread_id = configurable.get("thread_id")
-        
+        # Try to pull from RunnableConfig if available (langgraph puts it in context)
+        try:
+            from langchain_core.runnables.config import get_config
+            config = get_config()
+            if config and "configurable" in config:
+                thread_id = config["configurable"].get("thread_id")
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        from backend.infrastructure.api.correlation_middleware import get_current_agent
+        agent_name = get_current_agent()
+
         return thread_id, agent_name
 
     def _record_usage(self):
@@ -97,8 +105,5 @@ class AccountingProvider(LlmProvider):
 
     def embed(self, text: str) -> list[float]:
         # Emdeddings are not currently returning usage in the get_last_usage pattern, 
-        # but if they did, we would record it here.
-        try:
-            return self._provider.embed(text)
-        finally:
-            self._record_usage()
+        # and generating hundreds of rows during ingestion adds noise, so we skip it.
+        return self._provider.embed(text)

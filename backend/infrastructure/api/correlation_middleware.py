@@ -5,6 +5,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 _correlation_id: ContextVar[str] = ContextVar("correlation_id", default="no-correlation-id")
+_current_agent: ContextVar[str | None] = ContextVar("current_agent", default=None)
 
 def get_correlation_id() -> str:
     """
@@ -12,6 +13,9 @@ def get_correlation_id() -> str:
     Returns 'no-correlation-id' if outside a request context.
     """
     return _correlation_id.get()
+
+def get_current_agent() -> str | None:
+    return _current_agent.get()
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
