@@ -10,7 +10,8 @@ from backend.domain.ports import LlmProvider
 
 logger = logging.getLogger(__name__)
 
-QUESTIONS_PER_SUBJECT = 10
+QUESTIONS_PER_SUBJECT = 5   # questions generated per gap subject
+MAX_GAP_SUBJECTS = 5        # max subjects processed per run (cap total Ollama calls)
 
 
 class AssessmentGenerator:
@@ -79,6 +80,16 @@ class AssessmentGenerator:
                 gap_report.target_role,
             )
             return AssessmentItemReport(target_role=gap_report.target_role, items=[])
+
+        # Sort by severity (critical first) then cap to MAX_GAP_SUBJECTS
+        # so the highest-priority gaps are always assessed within the time budget.
+        SEVERITY_ORDER = {"critical": 0, "moderate": 1, "minor": 2}
+        gap_competencies.sort(key=lambda c: SEVERITY_ORDER.get(c.severity, 9))
+        gap_competencies = gap_competencies[:MAX_GAP_SUBJECTS]
+        logger.info(
+            "AssessmentGenerator: processing %d gap(s) for role '%s' (capped at %d).",
+            len(gap_competencies), gap_report.target_role, MAX_GAP_SUBJECTS,
+        )
 
         # Master list — accumulated across all per-subject LLM calls
         all_assessment_items: list[AssessmentItem] = []
