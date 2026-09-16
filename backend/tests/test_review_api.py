@@ -23,6 +23,15 @@ app.state.review_service = MockReviewService()
 def health():
     return {"status": "ok"}
 
+from backend.domain.entities.user import Role, User
+from backend.infrastructure.auth.dependencies import get_current_user
+
+
+def mock_get_current_user():
+    return User(user_id="test_lead", email="lead@example.com", hashed_password="x", role=Role.LEAD_INSTRUCTOR)
+
+app.dependency_overrides[get_current_user] = mock_get_current_user
+
 client = TestClient(app)
 
 

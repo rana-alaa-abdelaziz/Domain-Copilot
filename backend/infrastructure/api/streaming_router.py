@@ -7,8 +7,11 @@ import queue
 import threading
 import uuid
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sse_starlette.sse import EventSourceResponse
+
+from backend.domain.entities.user import User
+from backend.infrastructure.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/stream", tags=["Streaming & Realtime"])
 
@@ -26,7 +29,8 @@ async def _watch_disconnect(request: Request, cancel_event: threading.Event):
 async def stream_workflow_progress(
     request: Request, 
     target_role: str,
-    user_reported_subjects: list[str] = Query(default=[])  # noqa: B008
+    user_reported_subjects: list[str] = Query(default=[]),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Streams live agent progress events using Server-Sent Events (SSE).
@@ -126,7 +130,8 @@ async def stream_workflow_progress(
 async def stream_ask(
     request: Request,
     query: str,
-    target_role: str = Query(default="")
+    target_role: str = Query(default=""),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Streams a grounded answer token-by-token (FR-6 token-level streaming).

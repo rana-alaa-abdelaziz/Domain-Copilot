@@ -1,4 +1,106 @@
+let currentToken = localStorage.getItem("token");
+let currentUser = null;
+
+function parseJwt(token) {
+    try {
+        return JSON.parse(atob(token.split('.')[1]));
+    } catch (e) {
+        return null;
+    }
+}
+
+function updateAuthUI() {
+    if (currentToken) {
+        const payload = parseJwt(currentToken);
+        currentUser = payload;
+        document.getElementById("login-overlay").style.display = "none";
+        document.getElementById("main-container").style.display = "block";
+        document.getElementById("current-user-info").innerText = `Logged in as: ${payload.sub} (${payload.role})`;
+        
+        // Hide review buttons if instructor
+        const reviewPanel = document.getElementById("review-panel");
+        if (payload.role === "instructor" && reviewPanel) {
+            const buttons = reviewPanel.querySelectorAll("button");
+            buttons.forEach(btn => {
+                if (btn.innerText !== "Close") {
+                    btn.style.display = "none";
+                }
+            });
+        } else if (reviewPanel) {
+            const buttons = reviewPanel.querySelectorAll("button");
+            buttons.forEach(btn => btn.style.display = "inline-block");
+        }
+    } else {
+        document.getElementById("login-overlay").style.display = "flex";
+        document.getElementById("main-container").style.display = "none";
+        currentUser = null;
+    }
+}
+
+async function apiFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    if (currentToken) {
+        options.headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+        logout();
+        throw new Error("Unauthorized");
+    }
+    if (res.status === 403) {
+        alert("Access Denied: You do not have permission for this action.");
+        throw new Error("Forbidden");
+    }
+    return res;
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    currentToken = null;
+    updateAuthUI();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // Auth Logic
+    updateAuthUI();
+    const loginForm = document.getElementById("login-form");
+    if (loginForm) {
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = document.getElementById("login-email").value;
+            const password = document.getElementById("login-password").value;
+            const errorDiv = document.getElementById("login-error");
+            
+            const formData = new URLSearchParams();
+            formData.append("username", email);
+            formData.append("password", password);
+            
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: formData.toString()
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem("token", data.access_token);
+                    currentToken = data.access_token;
+                    errorDiv.innerText = "";
+                    updateAuthUI();
+                } else {
+                    const data = await res.json();
+                    errorDiv.innerText = data.detail || "Login failed";
+                }
+            } catch (err) {
+                errorDiv.innerText = "Network error";
+            }
+        });
+    }
+
     
     // --- 1. Ingest ---
     const ingestForm = document.getElementById('ingest-form');
@@ -14,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ingestResult.textContent = "Uploading and ingesting...";
         try {
-            const res = await fetch('/api/ingest/file', {
+            const res = await apiFetch('/api/ingest/file', {
                 method: 'POST',
                 body: formData
             });
@@ -44,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         askChat.innerHTML = savedChat;
     }
 
-    askForm.addEventListener('submit', (e) => {
+    askForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const query = askInput.value;
         if (!query) return;
@@ -53,29 +155,55 @@ document.addEventListener('DOMContentLoaded', () => {
         askInput.value = '';
         
         const botMsgDiv = appendMessage('bot', '...');
+        botMsgDiv.textContent = '';
         
-        const eventSource = new EventSource(`/api/stream/ask?query=${encodeURIComponent(query)}`);
-        
-        let markdownContent = "";
-        
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'token') {
-                markdownContent += data.text;
-                botMsgDiv.innerHTML = marked.parse(markdownContent);
+        // Use apiFetch for streaming to pass the Authorization header
+        const url = `/api/stream/ask?query=${encodeURIComponent(query)}`;
+        try {
+            const response = await apiFetch(url, { headers: { 'Accept': 'text/event-stream' } });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                let lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line
+
+                for (let line of lines) {
+                    if (line.startsWith('data:')) {
+                        const dataStr = line.replace('data:', '').trim();
+                        if (!dataStr) continue;
+                        
+                        const jsonData = JSON.parse(dataStr);
+                        
+                        if (jsonData.type === "message") {
+                            botMsgDiv.innerHTML += `<em>${jsonData.text}</em><br><br>`;
+                        } else if (jsonData.type === "citations") {
+                            const citHtml = jsonData.citations.map(c => `<li>Doc ID: ${c.document_id} (Score: ${c.score.toFixed(2)})</li>`).join('');
+                            botMsgDiv.innerHTML += `<strong>Citations:</strong><ul>${citHtml}</ul><hr>`;
+                        } else if (jsonData.type === "token") {
+                            // parse markdown on the fly or just append text (app.js originally appended then parsed)
+                            const currentText = botMsgDiv.getAttribute("data-raw") || "";
+                            const newText = currentText + jsonData.text;
+                            botMsgDiv.setAttribute("data-raw", newText);
+                            botMsgDiv.innerHTML = marked.parse(newText);
+                        }
+                    } else if (line.startsWith('event: done')) {
+                        // done
+                    } else if (line.startsWith('event: error')) {
+                        // Error event might follow on the next data line, or just be here
+                    }
+                }
             }
-            // We receive citations but no longer render them in the chat bubble
-        };
-        
-        eventSource.addEventListener('done', () => {
-            eventSource.close();
             localStorage.setItem('ask_chat_history', askChat.innerHTML);
-        });
-        
-        eventSource.onerror = (err) => {
+        } catch (err) {
             console.error("SSE Error:", err);
-            eventSource.close();
-        };
+            botMsgDiv.innerHTML += "<br><span style='color:red'>Stream error occurred.</span>";
+        }
     });
     
     function appendMessage(sender, text) {
@@ -93,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const wfCancel = document.getElementById('wf-cancel');
     let wfEventSource = null;
 
-    wfForm.addEventListener('submit', (e) => {
+    wfForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const role = document.getElementById('wf-role').value;
         const subjectsStr = document.getElementById('wf-subjects').value;
@@ -106,39 +234,67 @@ document.addEventListener('DOMContentLoaded', () => {
             url += `&user_reported_subjects=${encodeURIComponent(s)}`;
         });
         
-        wfEventSource = new EventSource(url);
         wfCancel.disabled = false;
         
-        wfEventSource.addEventListener('connected', (event) => {
-            wfLog.textContent += `[Connected] ${event.data}\n`;
-            wfLog.scrollTop = wfLog.scrollHeight;
-        });
-        
-        wfEventSource.addEventListener('progress', (event) => {
-            wfLog.textContent += `[Progress] ${event.data}\n`;
-            wfLog.scrollTop = wfLog.scrollHeight;
-        });
-
-        wfEventSource.addEventListener('paused_for_review', (event) => {
-            const data = JSON.parse(event.data);
-            wfLog.textContent += `[Paused] ${data.message} (Thread ID: ${data.thread_id})\n`;
-            wfLog.scrollTop = wfLog.scrollHeight;
+        // Use an AbortController so we can cancel the stream
+        const abortController = new AbortController();
+        wfCancel.onclick = () => {
+            abortController.abort();
+            wfLog.textContent += "Stream cancelled by user.\n";
             wfCancel.disabled = true;
-            wfEventSource.close();
-            fetchTasks(); // Auto-refresh the pending tasks table!
-        });
+        };
 
-        wfEventSource.addEventListener('error', (event) => {
-            // Note: SSE triggers 'error' for network drops too
-            if (event.data) {
-                wfLog.textContent += `[Error] ${event.data}\n`;
-            } else {
-                wfLog.textContent += "Stream closed or errored.\n";
+        try {
+            const response = await apiFetch(url, { 
+                headers: { 'Accept': 'text/event-stream' },
+                signal: abortController.signal
+            });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let currentEvent = 'message';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                let lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line
+
+                for (let line of lines) {
+                    if (line.startsWith('event:')) {
+                        currentEvent = line.replace('event:', '').trim();
+                    } else if (line.startsWith('data:')) {
+                        const dataStr = line.replace('data:', '').trim();
+                        if (!dataStr) continue;
+                        
+                        if (currentEvent === 'connected') {
+                            wfLog.textContent += `[Connected] ${dataStr}\n`;
+                        } else if (currentEvent === 'progress') {
+                            wfLog.textContent += `[Progress] ${dataStr}\n`;
+                        } else if (currentEvent === 'paused_for_review') {
+                            const jsonData = JSON.parse(dataStr);
+                            wfLog.textContent += `[Paused] ${jsonData.message} (Thread ID: ${jsonData.thread_id})\n`;
+                            wfCancel.disabled = true;
+                            fetchTasks(); // Auto-refresh the pending tasks table!
+                            abortController.abort(); // close stream locally
+                        } else if (currentEvent === 'error') {
+                            wfLog.textContent += `[Error] ${dataStr}\n`;
+                            wfCancel.disabled = true;
+                        }
+                        
+                        wfLog.scrollTop = wfLog.scrollHeight;
+                    }
+                }
             }
-            wfLog.scrollTop = wfLog.scrollHeight;
-            wfEventSource.close();
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                wfLog.textContent += "Stream closed or errored.\n";
+                console.error("SSE Error:", err);
+            }
             wfCancel.disabled = true;
-        });
+        }
     });
     
     wfCancel.addEventListener('click', () => {
@@ -169,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function fetchPendingTasks() {
         try {
-            const res = await fetch('/api/reviews/pending');
+            const res = await apiFetch('/api/reviews/pending');
             const data = await res.json();
             tableBody.innerHTML = '';
             
@@ -192,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function fetchCompletedTasks() {
         try {
-            const res = await fetch('/api/reviews/completed');
+            const res = await apiFetch('/api/reviews/completed');
             const data = await res.json();
             completedTableBody.innerHTML = '';
             
@@ -213,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     window.openReview = async function(thread_id) {
         try {
-            const res = await fetch(`/api/reviews/${thread_id}/pending`);
+            const res = await apiFetch(`/api/reviews/${thread_id}/pending`);
             const data = await res.json();
             
             currentReviewThreadId = thread_id;
@@ -222,12 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Format the artifacts nicely as HTML
             let html = `<h4>Competency Gap Report</h4>`;
-            if (data.competency_gap_report && data.competency_gap_report.unverified_competencies) {
-                data.competency_gap_report.unverified_competencies.forEach(comp => {
-                    html += `<div style="margin-bottom: 10px; padding: 10px; background: #f0f0f0; border-left: 4px solid #0066cc;">
-                        <strong>${comp.name}</strong><br>
-                        <em>${comp.description}</em><br>
-                        <span style="font-size: 0.9em; color: #555;">Rationale: ${comp.rationale}</span>
+            if (data.competency_gap_report && data.competency_gap_report.gaps && data.competency_gap_report.gaps.length > 0) {
+                data.competency_gap_report.gaps.forEach(gap => {
+                    const statusColor = gap.coverage_source === 'unverified' ? '#cc0000' : '#0066cc';
+                    html += `<div style="margin-bottom: 10px; padding: 10px; background: #f0f0f0; border-left: 4px solid ${statusColor};">
+                        <strong>${gap.competency}</strong><br>
+                        <em>Coverage: ${gap.coverage_source} | Severity: ${gap.severity}</em><br>
+                        <span style="font-size: 0.9em; color: #555;">Matched Subject: ${gap.matched_user_subject || 'None'}</span>
                     </div>`;
                 });
             } else {
@@ -280,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         try {
-            const res = await fetch(`/api/reviews/${currentReviewThreadId}/decision`, {
+            const res = await apiFetch(`/api/reviews/${currentReviewThreadId}/decision`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -308,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const threadId = document.getElementById('trace-thread-id').value;
         try {
-            const res = await fetch(`/api/trace/${encodeURIComponent(threadId)}`);
+            const res = await apiFetch(`/api/trace/${encodeURIComponent(threadId)}`);
             const data = await res.json();
             traceResult.textContent = JSON.stringify(data, null, 2);
         } catch (e) {

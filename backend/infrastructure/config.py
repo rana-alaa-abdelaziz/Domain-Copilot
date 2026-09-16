@@ -21,6 +21,7 @@ class Settings:
     openai_api_key: str
     ollama_base_url: str
     embedding_dim: int = 768
+    secret_key: str = "insecure_dev_secret"
 
 
 @lru_cache
@@ -30,6 +31,7 @@ def get_settings() -> Settings:
         llm_provider=os.environ.get("LLM_PROVIDER", "openai").lower(),
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        secret_key=os.environ.get("SECRET_KEY") or "insecure_dev_secret",
     )
 
 

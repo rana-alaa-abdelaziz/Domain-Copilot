@@ -1,13 +1,16 @@
 """
 FastAPI router for managing the Human-in-the-Loop review queue.
 """
+# ruff: noqa: B008
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from backend.application.use_cases.human_review_service import HumanReviewService
+from backend.domain.entities.user import User
 from backend.domain.ports.review_task_repository import ReviewTaskRepository
+from backend.infrastructure.auth.dependencies import get_current_user, require_role
 
 router = APIRouter(prefix="/api/reviews", tags=["Human Review Queue"])
 
@@ -49,7 +52,9 @@ def get_review_task_repository(request: Request) -> ReviewTaskRepository:
 
 @router.get("/{thread_id}/pending", status_code=status.HTTP_200_OK)
 def get_pending_review(
-    thread_id: str, service: HumanReviewService = Depends(get_review_service)  # noqa: B008
+    thread_id: str, 
+    service: HumanReviewService = Depends(get_review_service),
+    current_user: User = Depends(get_current_user),
 ):
     
     """Fetches paused review artifacts and state for a specific thread."""
@@ -71,10 +76,11 @@ def get_pending_review(
 
 
 @router.post("/{thread_id}/decision", status_code=status.HTTP_200_OK)
-def submit_review_decision(
+def submit_decision(
     thread_id: str,
-    payload: ReviewDecisionRequest,
-    service: HumanReviewService = Depends(get_review_service),  # noqa: B008
+    decision: ReviewDecisionRequest,
+    service: HumanReviewService = Depends(get_review_service),
+    current_user: User = Depends(require_role("lead_instructor")),
 ):
     
     """
@@ -84,10 +90,10 @@ def submit_review_decision(
     try:
         response = service.process_review_decision(
             thread_id=thread_id,
-            action=payload.action,
-            instructor_comment=payload.instructor_comment,
-            edited_artifacts=payload.edited_artifacts,
-            reviewer_id=payload.reviewer_id or "system_auto_assign",
+            action=decision.action,
+            instructor_comment=decision.instructor_comment,
+            edited_artifacts=decision.edited_artifacts,
+            reviewer_id=decision.reviewer_id or current_user.user_id,
         )
         return response
     except ValueError as val_err:
@@ -101,10 +107,13 @@ def submit_review_decision(
             detail=f"Failed to process review decision: {exc}",
         ) from exc
 
+
 @router.get("/pending", status_code=status.HTTP_200_OK)
 def list_pending_reviews(
     reviewer_id: str | None = None,
-    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+    service: HumanReviewService = Depends(get_review_service),
+    current_user: User = Depends(get_current_user),
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),
 ):
     """The endpoint that was missing entirely — lets a reviewer discover
     what's waiting for them without already knowing a thread_id."""
@@ -114,7 +123,9 @@ def list_pending_reviews(
 
 @router.get("/completed", status_code=status.HTTP_200_OK)
 def list_completed_reviews(
-    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+    service: HumanReviewService = Depends(get_review_service),
+    current_user: User = Depends(get_current_user),
+    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),
 ):
     """Fetches all reviewed tasks."""
     tasks = review_task_repo.list_completed()
@@ -128,25 +139,27 @@ class AssignRequest(BaseModel):
 @router.post("/{thread_id}/assign", status_code=status.HTTP_200_OK)
 def assign_review(
     thread_id: str,
-    payload: AssignRequest,
-    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+    request: AssignRequest,
+    repo: ReviewTaskRepository = Depends(get_review_task_repository),
+    current_user: User = Depends(require_role("lead_instructor")),
 ):
-    task = review_task_repo.get_by_thread_id(thread_id)
+    task = repo.get_by_thread_id(thread_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"No review task for thread '{thread_id}'")
-    review_task_repo.assign(task.review_task_id, payload.reviewer_id)
-    return {"thread_id": thread_id, "assigned_reviewer_id": payload.reviewer_id}
+    repo.assign(task.review_task_id, request.reviewer_id)
+    return {"thread_id": thread_id, "assigned_reviewer_id": request.reviewer_id}
     
 @router.get("/stats/all", status_code=status.HTTP_200_OK)
-def get_reviewer_statistics(
-    review_task_repo: ReviewTaskRepository = Depends(get_review_task_repository),  # noqa: B008
+def get_review_stats(
+    repo: ReviewTaskRepository = Depends(get_review_task_repository),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Retrieves aggregated reviewer statistics including tasks processed,
-    approval rates, and rejection breakdowns per reviewer (T5 requirement).
+    average completion times, and pending counts per reviewer.
     """
     try:
-        stats = review_task_repo.get_reviewer_stats()
+        stats = repo.get_reviewer_stats()
         return {"reviewer_statistics": stats}
     except Exception as exc:
         raise HTTPException(

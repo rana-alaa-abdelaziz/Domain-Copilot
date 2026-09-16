@@ -148,6 +148,18 @@ class ReviewTaskPriorityEnum(str, PyEnum):
     LOW = "low"
 
 
+
+
+
+class UserModel(Base):
+    __tablename__ = "users"
+    
+    user_id = Column(String, primary_key=True)
+    email = Column(String, nullable=False, unique=True, index=True)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+
+
 class ReviewTask(Base):
     __tablename__ = "review_task"
 

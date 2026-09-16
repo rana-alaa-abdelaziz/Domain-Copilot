@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI):
         app.state.review_task_repository = review_task_repository
         app.state.retrieve_use_case = retrieve_use_case
         app.state.llm_provider = llm_provider
+        app.state.db_session = session
         
         doc_repo = SqlAlchemyDocumentRepository(session=session)
         chunk_repo = SqlAlchemyChunkRepository(session=session)
@@ -115,7 +116,10 @@ app = FastAPI(title="Domain Copilot API", lifespan=lifespan)
 def health():
     return {"status": "ok"}
 
+from backend.infrastructure.api.auth_router import router as auth_router
+
 # Register the review router
+app.include_router(auth_router)
 app.include_router(review_router)
 app.include_router(streaming_router)
 app.include_router(ingest_router)

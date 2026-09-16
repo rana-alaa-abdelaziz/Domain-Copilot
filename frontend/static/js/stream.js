@@ -9,9 +9,16 @@ async function startStreamingWorkflow(targetRole, subjects = []) {
             url += `&user_reported_subjects=${encodeURIComponent(subject)}`;
         }
 
-        const response = await fetch(url, {
-            signal: abortController.signal
-        });
+        const options = {
+            signal: abortController.signal,
+            headers: {}
+        };
+        const token = localStorage.getItem("token");
+        if (token) {
+            options.headers["Authorization"] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(url, options);
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();

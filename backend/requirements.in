@@ -15,3 +15,5 @@ python-docx
 langgraph
 langgraph-checkpoint-postgres
 sse-starlette
+PyJWT
+bcrypt
