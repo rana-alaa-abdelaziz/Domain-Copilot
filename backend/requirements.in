@@ -17,3 +17,4 @@ langgraph-checkpoint-postgres
 sse-starlette
 PyJWT
 bcrypt
+python-multipart

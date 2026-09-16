@@ -8,31 +8,46 @@ change required elsewhere.
 """
 
 import os
-from dataclasses import dataclass
+import secrets
 from functools import lru_cache
 
 from backend.domain.ports import LlmProvider
 
 
-@dataclass(frozen=True)
 class Settings:
-    database_url: str
-    llm_provider: str
-    openai_api_key: str
-    ollama_base_url: str
-    embedding_dim: int = 768
-    secret_key: str = "insecure_dev_secret"
+    def __init__(self):
+        self.database_url = os.environ.get("DATABASE_URL", "")
+        self.llm_provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        self.ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.embedding_dim = 768
 
+        env = os.environ.get("APP_ENV", "development")
+        raw_secret = os.environ.get("SECRET_KEY")
+
+        if raw_secret:
+            if len(raw_secret.encode("utf-8")) < 32:
+                raise RuntimeError(
+                    "SECRET_KEY is set but shorter than 32 bytes — "
+                    "insecure for HS256 per RFC 7518. Generate one with: "
+                    "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                )
+            self.secret_key = raw_secret
+        elif env == "development":
+            # Only acceptable in explicit local dev — generated fresh
+            # per process start, not a fixed, repo-visible string, so it
+            # can never be relied on across restarts or leaked via git.
+            self.secret_key = secrets.token_urlsafe(32)
+        else:
+            raise RuntimeError(
+                f"SECRET_KEY environment variable is required when "
+                f"APP_ENV={env!r}. Refusing to start with no secret "
+                f"configured outside of development mode."
+            )
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings(
-        database_url=os.environ.get("DATABASE_URL", ""),
-        llm_provider=os.environ.get("LLM_PROVIDER", "openai").lower(),
-        openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
-        ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
-        secret_key=os.environ.get("SECRET_KEY") or "insecure_dev_secret",
-    )
+    return Settings()
 
 
 def get_llm_provider(settings: Settings | None = None) -> LlmProvider:

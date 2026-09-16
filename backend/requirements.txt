@@ -196,6 +196,8 @@ python-docx==1.2.0
     # via -r backend/requirements.in
 python-dotenv==1.2.3
     # via uvicorn
+python-multipart==0.0.32
+    # via -r backend/requirements.in
 pyyaml==6.0.3
     # via
     #   langchain-core
