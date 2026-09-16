@@ -38,7 +38,8 @@ from backend.domain.services.review_priority import compute_priority, compute_sl
 from backend.infrastructure.api.correlation_middleware import set_current_agent
 
 MAX_ITERATIONS = 10
-STEP_TIMEOUT_SECONDS = 300
+STEP_TIMEOUT_SECONDS = 300          # single-LLM-call agents (standards_mapper, outline)
+ASSESSMENT_TIMEOUT_SECONDS = 1200   # modular loop: 120s × up to 10 gap subjects
 MAX_RETRIES = 2
 RETRY_BACKOFF_BASE_SECONDS = 2
 
@@ -229,7 +230,7 @@ def create_copilot_graph(
 
             try:
                 assessment_report = _run_with_retry(
-                    lambda: _run_with_timeout(_call, STEP_TIMEOUT_SECONDS, cancel_event)
+                    lambda: _run_with_timeout(_call, ASSESSMENT_TIMEOUT_SECONDS, cancel_event)
                 )
                 return {
                     "assessment_report": assessment_report,
