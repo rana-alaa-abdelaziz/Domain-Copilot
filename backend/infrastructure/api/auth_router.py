@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
+from backend.infrastructure.api.rate_limiter import limiter
 from backend.infrastructure.auth.jwt_handler import create_access_token
 from backend.infrastructure.auth.password_hashing import verify_password
 from backend.infrastructure.db.repositories.user_repository import (
@@ -9,7 +10,8 @@ from backend.infrastructure.db.repositories.user_repository import (
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post("/token", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),

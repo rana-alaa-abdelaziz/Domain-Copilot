@@ -115,6 +115,20 @@ class IngestDocumentUseCase:
             )
             raise DocumentExtractionError(f"No extractable text in {file_path.name}")
 
+        import logging
+
+        from backend.domain.services.pii_detection import detect_pii
+        logger = logging.getLogger(__name__)
+        
+        for page in pages:
+            pii_found = detect_pii(page.get("text", ""))
+            if pii_found:
+                logger.warning(
+                    "PII detected in document %s page %s. Found patterns: %s. "
+                    "Note: This is a regex-based detection, no redaction is performed.",
+                    file_path.name, page.get("page_num", "?"), pii_found
+                )
+
         # Extracted successfully; status remains PROCESSING until the full pipeline
         # (chunk, embed, index) completes.
         self._set_status(document.doc_id, IngestionStatusEnum.PROCESSING)

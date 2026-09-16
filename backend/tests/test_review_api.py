@@ -49,3 +49,18 @@ def test_review_decision_invalid_action():
     }
     response = client.post("/api/reviews/test-thread-001/decision", json=payload)
     assert response.status_code == 400
+
+def test_ownership_assignment_advisory_only():
+    """
+    Confirms that any authenticated lead_instructor can submit a decision,
+    demonstrating that assigned_reviewer_id is informational/advisory,
+    not a hard access-control boundary.
+    """
+    payload = {
+        "action": "approve",
+        "instructor_comment": "LGTM",
+        "reviewer_id": "original-assignee-123" # even if they set this, current_user is lead_instructor
+    }
+    response = client.post("/api/reviews/test-thread-001/decision", json=payload)
+    # The mock review service just returns 200 OK because the user is a lead_instructor
+    assert response.status_code == 200

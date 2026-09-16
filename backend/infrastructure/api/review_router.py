@@ -75,8 +75,13 @@ def get_pending_review(
         ) from exc
 
 
+from backend.infrastructure.api.rate_limiter import limiter
+
+
 @router.post("/{thread_id}/decision", status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
 def submit_decision(
+    request: Request,
     thread_id: str,
     decision: ReviewDecisionRequest,
     service: HumanReviewService = Depends(get_review_service),
@@ -93,6 +98,11 @@ def submit_decision(
             action=decision.action,
             instructor_comment=decision.instructor_comment,
             edited_artifacts=decision.edited_artifacts,
+            # Any lead_instructor may act on any pending review — assignment is
+            # for queue prioritization/sorting, not an access-control boundary.
+            # A lead_instructor picking up an unassigned or reassigned task is
+            # expected behavior (supports escalation without a separate transfer
+            # step). See docs/BRD.md assumptions.
             reviewer_id=decision.reviewer_id or current_user.user_id,
         )
         return response
