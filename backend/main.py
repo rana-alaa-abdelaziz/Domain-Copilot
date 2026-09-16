@@ -1,4 +1,9 @@
+import asyncio
 import os
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -112,10 +117,37 @@ async def lifespan(app: FastAPI):
     
     # Cleanup on shutdown if needed
 
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from backend.infrastructure.api.correlation_middleware import CorrelationIdMiddleware
 
 app = FastAPI(title="Domain Copilot API", lifespan=lifespan)
 app.add_middleware(CorrelationIdMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("ALLOWED_ORIGINS", "").split(",") if os.environ.get("ALLOWED_ORIGINS") else [],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+from backend.infrastructure.api.rate_limiter import limiter
+
+# Note: we need to set app.state.limiter before we include routers
+# but we can do it right here since app is created
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.get("/health")
 def health():

@@ -37,7 +37,7 @@ from backend.domain.ports.review_task_repository import ReviewTaskRepository
 from backend.domain.services.review_priority import compute_priority, compute_sla_due_at
 
 MAX_ITERATIONS = 10
-STEP_TIMEOUT_SECONDS = 60
+STEP_TIMEOUT_SECONDS = 300
 MAX_RETRIES = 2
 RETRY_BACKOFF_BASE_SECONDS = 2
 
@@ -62,14 +62,17 @@ import contextvars
 
 def _run_with_timeout(fn, timeout_seconds: int, cancel_event=None):
     ctx = contextvars.copy_context()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(ctx.run, fn)
-        try:
-            return future.result(timeout=timeout_seconds)
-        except FutureTimeoutError as exc:
-            if cancel_event:
-                cancel_event.set()
-            raise AgentTimeoutError("agent", timeout_seconds) from exc
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(ctx.run, fn)
+    try:
+        return future.result(timeout=timeout_seconds)
+    except FutureTimeoutError as exc:
+        if cancel_event:
+            cancel_event.set()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise AgentTimeoutError("agent", timeout_seconds) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _run_with_retry(fn, max_retries: int = MAX_RETRIES):

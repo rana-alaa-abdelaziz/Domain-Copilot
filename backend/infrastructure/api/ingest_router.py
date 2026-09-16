@@ -4,7 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from backend.domain.entities.user import User
 from backend.infrastructure.auth.dependencies import get_current_user
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/ingest", tags=["Ingestion"])
 def ingest_file(
     request: Request,
     file: UploadFile = File(...),
+    doc_category: str | None = Form(None),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -34,7 +35,8 @@ def ingest_file(
         result = pipeline.execute(
             file_path=temp_path,
             source="UI Upload",
-            version="1.0"
+            version="1.0",
+            doc_category=doc_category
         )
         
         doc = result.ingestion.document if result.ingestion and hasattr(result.ingestion, "document") else None

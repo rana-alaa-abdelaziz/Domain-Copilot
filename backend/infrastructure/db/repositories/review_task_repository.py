@@ -133,16 +133,16 @@ class SqlAlchemyReviewTaskRepository(ReviewTaskRepository):
         )
     def get_reviewer_stats(self) -> dict[str, Any]:
         """Aggregates review metrics grouped by assigned reviewer."""
-        from sqlalchemy import func
+        from sqlalchemy import case, func
 
         from backend.infrastructure.db.models import ReviewTaskStatusEnum
 
         rows = self._session.query(
             OrmReviewTask.assigned_reviewer_id,
             func.count(OrmReviewTask.review_task_id).label("total_tasks"),
-            func.sum(func.case((OrmReviewTask.status == ReviewTaskStatusEnum.APPROVED, 1), else_=0)).label("approved_count"),
-            func.sum(func.case((OrmReviewTask.status == ReviewTaskStatusEnum.REJECTED, 1), else_=0)).label("rejected_count"),
-            func.sum(func.case((OrmReviewTask.status.in_([ReviewTaskStatusEnum.EDITED_APPROVED]), 1), else_=0)).label("edited_count"),
+            func.sum(case((OrmReviewTask.status == ReviewTaskStatusEnum.APPROVED, 1), else_=0)).label("approved_count"),
+            func.sum(case((OrmReviewTask.status == ReviewTaskStatusEnum.REJECTED, 1), else_=0)).label("rejected_count"),
+            func.sum(case((OrmReviewTask.status.in_([ReviewTaskStatusEnum.EDITED_APPROVED]), 1), else_=0)).label("edited_count"),
         ).group_by(OrmReviewTask.assigned_reviewer_id).all()
 
         stats = {}
