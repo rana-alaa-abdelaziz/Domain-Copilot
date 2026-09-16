@@ -196,8 +196,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (jsonData.type === "message") {
                             botMsgDiv.innerHTML += `<em>${jsonData.text}</em><br><br>`;
                         } else if (jsonData.type === "citations") {
-                            const citHtml = jsonData.citations.map(c => `<li>File: ${c.document_id} (Score: ${c.score.toFixed(2)})</li>`).join('');
-                            botMsgDiv.innerHTML += `<strong>Citations:</strong><ul>${citHtml}</ul><hr>`;
+                            if (jsonData.citations && jsonData.citations.length > 0) {
+                                const citHtml = jsonData.citations.map(c => `<li>File: ${c.document_id} (Score: ${c.score.toFixed(2)})</li>`).join('');
+                                botMsgDiv.innerHTML += `<strong>Citations:</strong><ul>${citHtml}</ul><hr>`;
+                            }
                         } else if (jsonData.type === "token") {
                             // parse markdown on the fly or just append text (app.js originally appended then parsed)
                             const currentText = botMsgDiv.getAttribute("data-raw") || "";

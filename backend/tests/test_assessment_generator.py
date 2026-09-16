@@ -1,8 +1,14 @@
-import pytest
 
-from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport, validate_item_semantics
 from backend.application.agents.assessment_generator import AssessmentGenerator
-from backend.domain.entities.competency_gap_report import CompetencyGapReport, CompetencyGap
+from backend.domain.entities.assessment_item import (
+    AssessmentItem,
+    AssessmentItemReport,
+    validate_item_semantics,
+)
+from backend.domain.entities.competency_gap_report import (
+    CompetencyGap,
+    CompetencyGapReport,
+)
 from backend.domain.ports import LlmProvider
 
 

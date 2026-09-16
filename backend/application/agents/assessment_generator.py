@@ -4,7 +4,11 @@ import threading
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
-from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport, validate_item_semantics
+from backend.domain.entities.assessment_item import (
+    AssessmentItem,
+    AssessmentItemReport,
+    validate_item_semantics,
+)
 from backend.domain.entities.competency_gap_report import CompetencyGapReport
 from backend.domain.ports import LlmProvider
 

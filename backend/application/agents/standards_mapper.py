@@ -8,9 +8,9 @@ or LangGraph imports.
 
 import contextlib
 import json
+import math
 import re
 import threading
-import math
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
@@ -74,7 +74,7 @@ class StandardsMapper:
         self._llm_provider = llm_provider
         self._prompt_path = prompt_path or DEFAULT_PROMPT_PATH
         self._canonical_embeddings: dict[str, list[float]] = {}
-        for canonical_subject in DOMAIN_KEYWORDS.keys():
+        for canonical_subject in DOMAIN_KEYWORDS:
             self._canonical_embeddings[canonical_subject] = self._llm_provider.embed(canonical_subject)
 
     @staticmethod
@@ -188,7 +188,6 @@ class StandardsMapper:
                         return subject
         except Exception as e:
             print(f"Embedding fallback failed: {e}")
-            pass
 
         return None
 
