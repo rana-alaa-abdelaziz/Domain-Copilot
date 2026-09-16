@@ -159,3 +159,13 @@ is not evidence of what a document actually contains.
 - Fixed a JSON serialization `TypeError` in `copilot_graph.py`'s `run_publish_curriculum` node by explicitly mapping `.model_dump()` across `outline.modules` (a list of Pydantic models) before passing it to the repository's `module_outline` JSONB field.
 - Fixed a regression where `human_review_service.py` failed to approve/reject tasks that hadn't explicitly been assigned by auto-assigning pending tasks to a default identity before saving the decision.
 - Added an idempotency check in `publish_curriculum` to ensure it skips re-saving if a curriculum for the same `thread_id` already exists.
+
+## 2026-09-16 — Security Hardening: JWT Secret Enforcement
+
+**What the AI got wrong (or missed initially):**
+- In `backend/infrastructure/config.py`, the `Settings` class fell back to a hardcoded insecure default (`"insecure_dev_secret"`) for the `SECRET_KEY` if it was not provided in the environment. This meant that if deployed to production without the variable set, it would silently start up with a compromised secret, violating OWASP Cryptographic Failures guidelines.
+
+**How it was corrected:**
+- Updated the configuration logic so that it strictly checks the environment. In `development` mode, it auto-generates a secure 32-byte token in memory per process, rather than relying on a static string.
+- In any other environment (e.g., `production`), it raises a `RuntimeError` and refuses to start if `SECRET_KEY` is missing or is under 32 bytes in length (RFC 7518 compliance).
+- Added regression tests in `backend/tests/test_config.py` to prove that missing or short secrets properly crash the application in production environments, while succeeding with dynamic secure keys in development.
