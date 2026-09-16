@@ -1,0 +1,7 @@
+- `[ ]` Update `backend/application/agents/standards_mapper.py` to use cosine similarity.
+  - `[ ]` Remove `DOMAIN_KEYWORDS`
+  - `[ ]` Add `cosine_similarity` function
+  - `[ ]` Refactor `_find_matching_subject` to use embeddings
+- `[ ]` Run unit tests `pytest backend/tests/test_standards_mapper.py`
+- `[ ]` Verify architecture boundaries `pytest backend/tests/test_architecture_boundaries.py`
+- `[ ]` Run full test suite `pytest backend/tests`

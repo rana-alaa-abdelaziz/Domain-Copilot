@@ -30,6 +30,7 @@ DOMAIN_KEYWORDS = {
     "sql": {"sql", "database", "relational", "postgres", "mysql", "db", "modeling"},
     "test": {"test", "testing", "qa", "pytest", "unit", "mock", "debugging"},
     "docker": {"docker", "container", "containerization"},
+    "frontend": {"frontend", "front-end", "front", "ui", "javascript", "js", "react", "html", "css", "web"},
 }
 
 GENERIC_STOPWORDS = {

@@ -1,14 +1,22 @@
+# ruff: noqa: B008
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+
+from backend.domain.entities.user import User
+from backend.infrastructure.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/ingest", tags=["Ingestion"])
 
 @router.post("/file")
-def ingest_file(request: Request, file: UploadFile = File(...)):  # noqa: B008
+def ingest_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
     """
     Upload a document (PDF, etc.) for ingestion.
     """
