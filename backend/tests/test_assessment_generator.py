@@ -22,13 +22,13 @@ def test_item_with_answer_not_in_options_fails_semantic_validation():
 
 
 class FakeAlwaysEmptyLLM(LlmProvider):
-    def complete(self, prompt: str, cancel_event=None) -> str:
+    def complete(self, prompt: str, cancel_event=None, **kwargs) -> str:
         return ""
-    def call_tool(self, prompt, tool, cancel_event=None):
+    def call_tool(self, prompt, tool, cancel_event=None, **kwargs):
         return ""
-    def embed(self, text, cancel_event=None):
+    def embed(self, text, cancel_event=None, **kwargs):
         return []
-    def stream(self, prompt, cancel_event=None):
+    def stream(self, prompt, cancel_event=None, **kwargs):
         yield ""
     def get_last_usage(self):
         return {}
@@ -46,77 +46,84 @@ class FakeRetrieveUseCase:
         return Result()
 
 
-def test_assessment_generator_returns_zero_when_no_verified_subjects():
+def test_assessment_generator_returns_empty_when_no_gaps():
+    """If ALL competencies are already matched (no gaps), the generator returns an empty report."""
     llm = FakeAlwaysEmptyLLM()
     retrieve_uc = FakeRetrieveUseCase()
     generator = AssessmentGenerator(retrieve_use_case=retrieve_uc, llm_provider=llm)
-    
-    gap_report_with_one_gap = CompetencyGapReport(
+
+    gap_report_all_known = CompetencyGapReport(
         target_role="Junior Backend Developer",
         gaps=[
-            CompetencyGap(competency="Database Management", severity="critical", coverage_source="unverified", matched_user_subject=None)
-        ]
+            CompetencyGap(
+                competency="Database Management",
+                severity="critical",
+                coverage_source="unverified",
+                matched_user_subject="SQL",  # user KNOWS this subject — not a gap
+            )
+        ],
     )
-    
-    report = generator.generate_items(gap_report_with_one_gap)
-    assert isinstance(report, dict)
-    assert report["total_questions"] == 0
-    assert "sections" in report
-    assert len(report["sections"]) == 0
-    assert "Cannot generate assessment" in report["message"]
+
+    report = generator.generate_items(gap_report_all_known)
+    assert isinstance(report, AssessmentItemReport)
+    assert len(report.items) == 0
 
 
 class FakeJSONLLM(LlmProvider):
-    def complete(self, prompt: str, cancel_event=None, options=None) -> str:
+    """Returns the new per-subject JSON schema: {subject, questions[]}."""
+    def complete(self, prompt: str, cancel_event=None, **kwargs) -> str:
         return """
         {
-          "total_questions": 2,
-          "sections": [
+          "subject": "Comp A",
+          "questions": [
             {
-              "subject": "Subject A",
-              "questions": [
-                {
-                  "question_number": 1,
-                  "competency": "Comp A",
-                  "question": "Test Q1?",
-                  "options": ["A) 1", "B) 2", "C) 3", "D) 4"],
-                  "correct_answer": "B) 2",
-                  "distractor_rationales": {"A": "wrong", "C": "wrong", "D": "wrong"},
-                  "rationale": "Because 2"
-                }
-              ]
+              "question_number": 1,
+              "competency": "Comp A",
+              "question": "Test Q1?",
+              "options": ["A) 1", "B) 2", "C) 3", "D) 4"],
+              "correct_answer": "B",
+              "distractor_rationales": {"A": "wrong", "C": "wrong", "D": "wrong"},
+              "rationale": "Because 2"
             }
           ]
         }
         """
-    def call_tool(self, prompt, tool, cancel_event=None):
+    def call_tool(self, prompt, tool, cancel_event=None, **kwargs):
         return ""
-    def embed(self, text, cancel_event=None):
+    def embed(self, text, cancel_event=None, **kwargs):
         return []
-    def stream(self, prompt, cancel_event=None):
+    def stream(self, prompt, cancel_event=None, **kwargs):
         yield ""
     def get_last_usage(self):
         return {}
 
 
-def test_assessment_generator_parses_sections():
+def test_assessment_generator_parses_per_subject_json():
+    """Generator correctly maps letter correct_answer 'B' to full option string."""
     llm = FakeJSONLLM()
     retrieve_uc = FakeRetrieveUseCase()
     generator = AssessmentGenerator(retrieve_use_case=retrieve_uc, llm_provider=llm)
-    
+
     gap_report = CompetencyGapReport(
         target_role="Junior Backend Developer",
         gaps=[
-            CompetencyGap(competency="Comp A", severity="critical", coverage_source="unverified", matched_user_subject="Subject A")
-        ]
+            CompetencyGap(
+                competency="Comp A",
+                severity="critical",
+                coverage_source="unverified",
+                matched_user_subject=None,  # This IS a gap — no known subject
+            )
+        ],
     )
-    
+
     report = generator.generate_items(gap_report)
     assert isinstance(report, AssessmentItemReport)
     assert len(report.items) == 1
     item = report.items[0]
-    assert item.subject == "Subject A"
+    # subject comes from the LLM's "subject" field
+    assert item.subject == "Comp A"
     assert item.question_text == "Test Q1?"
-    assert "B) 2" in item.correct_answer
+    # letter "B" must be resolved to the full option string
+    assert item.correct_answer == "B) 2"
     assert "wrong" in item.distractor_rationales["A"]
     assert item.source_chunk_ids == ["c1"]

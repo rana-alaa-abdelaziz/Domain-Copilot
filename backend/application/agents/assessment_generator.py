@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 from pathlib import Path
 
@@ -7,10 +8,18 @@ from backend.domain.entities.assessment_item import AssessmentItem, AssessmentIt
 from backend.domain.entities.competency_gap_report import CompetencyGapReport
 from backend.domain.ports import LlmProvider
 
+logger = logging.getLogger(__name__)
+
+QUESTIONS_PER_SUBJECT = 10
+
 
 class AssessmentGenerator:
     """
-    Generates assessment items for unverified competencies purely from corpus context with zero hardcoded values.
+    Generates assessment items for unverified competency gaps purely from corpus
+    context, with zero hardcoded values.
+
+    Architecture: modular, one LLM call per gap subject so that a single bad
+    LLM response cannot wipe the entire assessment.
     """
 
     def __init__(
@@ -46,122 +55,119 @@ class AssessmentGenerator:
                 self.prompt_template = f.read()
         else:
             raise FileNotFoundError(
-                f"Assessment generator prompt artifact not found. Checked paths: {[str(p) for p in candidate_paths]}"
+                f"Assessment generator prompt artifact not found. "
+                f"Checked paths: {[str(p) for p in candidate_paths]}"
             )
 
     def generate_items(
         self,
         gap_report: CompetencyGapReport,
         cancel_event: "threading.Event | None" = None,
-    ) -> AssessmentItemReport | dict:
-        
-        # 1. Target the Gaps
+    ) -> AssessmentItemReport:
+
+        # 1. Target the Gaps — select only competencies the user does NOT know
         gap_competencies = [
             c
             for c in gap_report.gaps
-            if not c.matched_user_subject or str(c.matched_user_subject).lower() == "none"
+            if not c.matched_user_subject
+            or str(c.matched_user_subject).lower() == "none"
         ]
 
         if not gap_competencies:
-            return {
-                "total_questions": 0,
-                "sections": [],
-                "message": (
-                    "Cannot generate assessment: No competency gaps identified."
-                ),
-            }
-
-        # 2 & 3. Retrieve Context FIRST, then Filter (Anti-Hallucination)
-        valid_gaps = []
-        subject_context = {}
-        subject_chunk_ids = {}
-
-        for c in gap_competencies:
-            retrieval_results = self.retrieve_uc.execute(query=c.competency, top_k=5)
-            if retrieval_results.citations:
-                context_text = "\n".join([cit.content for cit in retrieval_results.citations])
-                subject_context[c.competency] = context_text
-                subject_chunk_ids[c.competency] = [cit.chunk_id for cit in retrieval_results.citations]
-                valid_gaps.append(c)
-
-        if not valid_gaps:
-            return {
-                "total_questions": 0,
-                "sections": [],
-                "message": (
-                    "Cannot generate assessment: No verified curriculum context available for the gaps."
-                ),
-            }
-
-        # 4. Reallocate Quotas
-        num_subjects = len(valid_gaps)
-        base_quota = 20 // num_subjects
-        remainder = 20 % num_subjects
-
-        quotas = {}
-        for i, c in enumerate(valid_gaps):
-            quotas[c.competency] = base_quota + (1 if i < remainder else 0)
-
-        # Combine context
-        context_parts = []
-        for c in valid_gaps:
-            context_parts.append(f"--- SUBJECT: {c.competency} ---\n{subject_context[c.competency]}")
-        combined_context = "\n\n".join(context_parts)
-
-        quotas_str = "\n".join([f"- {subject}: {q} questions" for subject, q in quotas.items()])
-        
-        prompt = self.prompt_template.format(
-            context=combined_context,
-            subject_quotas=quotas_str,
-            total_questions=20
-        )
-        raw_response = None
-        try:
-            raw_response = self.llm.complete(
-                prompt=prompt, 
-                cancel_event=cancel_event, 
-                max_tokens=8192,
-                response_format={"type": "json_object"}
+            logger.warning(
+                "AssessmentGenerator: no gap competencies found in report for role '%s'.",
+                gap_report.target_role,
             )
-            data = self._parse_json_response(raw_response)
-        except Exception as e:
-            print(f"Failed to generate or parse blueprint: {e}")
-            if raw_response:
-                print(f"Raw response: {raw_response}")
             return AssessmentItemReport(target_role=gap_report.target_role, items=[])
-            
-        items = []
-        sections = data.get("sections", [])
-        for section in sections:
-            subject_name = section.get("subject", "Uncategorized")
-            chunk_ids = subject_chunk_ids.get(subject_name, [])
-            for q_data in section.get("questions", []):
+
+        # Master list — accumulated across all per-subject LLM calls
+        all_assessment_items: list[AssessmentItem] = []
+
+        for gap in gap_competencies:
+            # Thread-safety: respect cancellation between subjects
+            if cancel_event and cancel_event.is_set():
+                logger.info("AssessmentGenerator: cancelled before processing '%s'.", gap.competency)
+                break
+
+            # 2. Retrieve context FIRST — Anti-Hallucination Guardrail
+            retrieval_results = self.retrieve_uc.execute(query=gap.competency, top_k=5)
+            if not retrieval_results.citations:
+                logger.warning(
+                    "AssessmentGenerator: no curriculum chunks found for gap '%s' — skipping.",
+                    gap.competency,
+                )
+                continue
+
+            context_text = "\n".join(cit.content for cit in retrieval_results.citations)
+            chunk_ids = [cit.chunk_id for cit in retrieval_results.citations]
+
+            # 3. Build per-subject prompt
+            prompt = self.prompt_template.format(
+                target_subject=gap.competency,
+                total_questions=QUESTIONS_PER_SUBJECT,
+                context=context_text,
+            )
+
+            # 4. LLM call — wrapped per-subject so one failure doesn't abort the batch
+            try:
+                raw_response = self.llm.complete(
+                    prompt=prompt,
+                    cancel_event=cancel_event,
+                    max_tokens=4096,
+                    response_format={"type": "json_object"},
+                )
+                data = self._parse_json_response(raw_response)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "AssessmentGenerator: LLM call/parse failed for gap '%s': %s",
+                    gap.competency,
+                    exc,
+                )
+                continue
+
+            # 5. Data mapping
+            subject_name = data.get("subject", gap.competency)
+            for q_data in data.get("questions", []):
                 try:
-                    item = self._build_item(q_data, subject_name, gap_report.target_role, chunk_ids)
+                    item = self._build_item(
+                        q_data, subject_name, gap_report.target_role, chunk_ids
+                    )
                     problems = validate_item_semantics(item)
-                    if not problems:
-                        items.append(item)
+                    if problems:
+                        logger.warning(
+                            "AssessmentGenerator: item skipped for '%s': %s",
+                            gap.competency,
+                            problems,
+                        )
                     else:
-                        print(f"Skipping item due to validation problems: {problems}")
-                except Exception as e:
-                    print(f"Failed to build item: {e}")
-                
-        return AssessmentItemReport(target_role=gap_report.target_role, items=items)
+                        all_assessment_items.append(item)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "AssessmentGenerator: failed to build item for '%s': %s",
+                        gap.competency,
+                        exc,
+                    )
+
+        return AssessmentItemReport(
+            target_role=gap_report.target_role,
+            items=all_assessment_items,
+        )
 
     @staticmethod
     def _parse_json_response(raw_response: str) -> dict:
-        start = raw_response.find('{')
-        end = raw_response.rfind('}')
+        start = raw_response.find("{")
+        end = raw_response.rfind("}")
         if start != -1 and end != -1 and end >= start:
-            cleaned = raw_response[start:end+1]
+            cleaned = raw_response[start : end + 1]
             return json.loads(cleaned)
-        raise ValueError("No JSON object found in response")
+        raise ValueError("No JSON object found in LLM response")
 
     def _build_item(
         self, data: dict, subject: str, target_role: str, source_chunk_ids: list[str]
     ) -> AssessmentItem:
         question_type = "multiple_choice"
-        
+
+        # Normalise options — LLM may return list, JSON-string, or dict
         raw_options = data.get("options", [])
         if isinstance(raw_options, str):
             try:
@@ -172,22 +178,35 @@ class AssessmentGenerator:
         elif isinstance(raw_options, dict):
             options = list(raw_options.values())
         else:
-            options = list(raw_options)
+            options = [str(o).strip() for o in raw_options]
 
-        correct_answer = data.get("correct_answer", "").strip()
+        options = [str(opt).strip() for opt in options]
+
+        # Resolution step: LLM returns "B" — map to full option string "B) Option text"
+        correct_answer_raw = str(data.get("correct_answer", "")).strip()
 
         if question_type == "multiple_choice" and options:
-            options = [str(opt).strip() for opt in options]
-            matched_option = next(
-                (
-                    opt
-                    for opt in options
-                    if correct_answer.lower() in opt.lower()
-                    or opt.lower() in correct_answer.lower()
-                ),
-                options[0],
+            # First try: exact letter match (new prompt format returns "B")
+            letter = correct_answer_raw.rstrip(")").strip().upper()
+            letter_matched = next(
+                (opt for opt in options if opt.upper().startswith(f"{letter})")),
+                None,
             )
-            correct_answer = matched_option
+            if letter_matched:
+                correct_answer = letter_matched
+            else:
+                # Fallback: substring match (handles "B) Option text" full-string answers)
+                correct_answer = next(
+                    (
+                        opt
+                        for opt in options
+                        if correct_answer_raw.lower() in opt.lower()
+                        or opt.lower() in correct_answer_raw.lower()
+                    ),
+                    options[0],
+                )
+        else:
+            correct_answer = correct_answer_raw
 
         return AssessmentItem(
             subject=subject,
@@ -202,4 +221,3 @@ class AssessmentGenerator:
             difficulty="intermediate",
             source_chunk_ids=source_chunk_ids,
         )
-
