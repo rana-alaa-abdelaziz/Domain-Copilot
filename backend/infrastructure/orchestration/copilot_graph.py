@@ -57,9 +57,13 @@ class CopilotState(TypedDict, total=False):
     error: str | None
 
 
+import contextvars
+
+
 def _run_with_timeout(fn, timeout_seconds: int, cancel_event=None):
+    ctx = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(fn)
+        future = executor.submit(ctx.run, fn)
         try:
             return future.result(timeout=timeout_seconds)
         except FutureTimeoutError as exc:

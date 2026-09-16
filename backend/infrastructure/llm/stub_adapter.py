@@ -11,6 +11,13 @@ from backend.domain.ports import LlmProvider
 
 
 class StubLlmAdapter(LlmProvider):
+    def get_last_usage(self) -> dict | None:
+        return {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "model": "stub"
+        }
+
     def complete(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> str:
         if cancel_event and cancel_event.is_set():
             raise ClientCancelledError()

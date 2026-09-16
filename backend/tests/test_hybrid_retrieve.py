@@ -65,6 +65,9 @@ class StubQueryLlmProvider(LlmProvider):
     def embed(self, text: str) -> list[float]:
         return self._mapping.get(text, self._default)
 
+    def get_last_usage(self) -> dict | None:
+        return {"prompt_tokens": 10, "completion_tokens": 20, "model": "stub"}
+
 
 def _seed_document_and_chunks(session):
     doc_id = str(uuid.uuid4())

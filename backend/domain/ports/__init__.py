@@ -31,6 +31,14 @@ class LlmProvider(ABC):
     @abstractmethod
     def embed(self, text: str) -> list[float]: ...
 
+    @abstractmethod
+    def get_last_usage(self) -> dict | None:
+        """Returns {"prompt_tokens": int, "completion_tokens": int,
+        "model": str} for the most recent call on this provider instance,
+        or None if the provider doesn't report usage. Called immediately
+        after a completion/tool call to record accounting."""
+        ...
+
 
 class VectorStore(ABC):
     @abstractmethod

@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -21,7 +21,9 @@ from backend.infrastructure.api.ingest_router import router as ingest_router
 from backend.infrastructure.api.review_router import router as review_router
 from backend.infrastructure.api.streaming_router import router as streaming_router
 from backend.infrastructure.api.trace_router import router as trace_router
-from backend.infrastructure.config import get_llm_provider
+from backend.infrastructure.config import (
+    get_instrumented_llm_provider,
+)
 from backend.infrastructure.db.repositories.chunk_repository import (
     SqlAlchemyChunkRepository,
 )
@@ -52,7 +54,7 @@ async def lifespan(app: FastAPI):
         
         review_task_repository = SqlAlchemyReviewTaskRepository(session=session)
     
-        llm_provider = get_llm_provider()
+        llm_provider = get_instrumented_llm_provider(session=session)
         vector_store = PgVectorStore(session=session)
         keyword_search = PgKeywordSearch(session=session)
         
@@ -110,11 +112,64 @@ async def lifespan(app: FastAPI):
     
     # Cleanup on shutdown if needed
 
+from backend.infrastructure.api.correlation_middleware import CorrelationIdMiddleware
+
 app = FastAPI(title="Domain Copilot API", lifespan=lifespan)
+app.add_middleware(CorrelationIdMiddleware)
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/ready")
+def ready(request: Request):
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    
+    status_code = 200
+    details = {"database": "ok", "llm": "ok"}
+    
+    # Check Database
+    try:
+        session = request.app.state.db_session
+        session.execute(text("SELECT 1"))
+    except Exception as e:  # noqa: BLE001
+        details["database"] = f"failed: {e}"
+        status_code = 503
+
+    # Check LLM Provider
+    try:
+        llm = request.app.state.llm_provider
+        # Since the provider is wrapped in AccountingProvider, we can access the underlying provider if needed
+        # Or just do a cheap reachability check
+        provider_name = llm.__class__.__name__
+        if "AccountingProvider" in provider_name:
+            actual_provider = llm._provider
+        else:
+            actual_provider = llm
+            
+        if "OpenAIAdapter" in actual_provider.__class__.__name__:
+            # For OpenAI, check if API key is configured
+            if not actual_provider._client.api_key:
+                raise ValueError("OpenAI API key missing")
+        elif "OllamaAdapter" in actual_provider.__class__.__name__:
+            # For Ollama, hit its base URL / api/tags or simply let's check its client base url
+            import httpx
+            # A cheap ping to the base url
+            try:
+                # ollama base url is in actual_provider._client._client.base_url
+                res = httpx.get(f"{actual_provider._client._client.base_url}/api/tags", timeout=2.0)
+                res.raise_for_status()
+            except Exception as httpe:  # noqa: BLE001
+                raise ValueError(f"Ollama not reachable: {httpe}")
+    except Exception as e:  # noqa: BLE001
+        details["llm"] = f"failed: {e}"
+        status_code = 503
+
+    if status_code != 200:
+        return JSONResponse(content=details, status_code=status_code)
+    
+    return details
 
 from backend.infrastructure.api.auth_router import router as auth_router
 
