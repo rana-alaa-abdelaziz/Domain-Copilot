@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
-from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport
+from backend.domain.entities.assessment_item import AssessmentItem, AssessmentItemReport, validate_item_semantics
 from backend.domain.entities.competency_gap_report import CompetencyGapReport
 from backend.domain.ports import LlmProvider
 
@@ -53,87 +53,115 @@ class AssessmentGenerator:
         self,
         gap_report: CompetencyGapReport,
         cancel_event: "threading.Event | None" = None,
-    ) -> AssessmentItemReport:
-        report = gap_report
-        items: list[AssessmentItem] = []
+    ) -> AssessmentItemReport | dict:
+        
+        # 1. Target the Gaps
+        gap_competencies = [
+            c
+            for c in gap_report.gaps
+            if not c.matched_user_subject or str(c.matched_user_subject).lower() == "none"
+        ]
 
-        if not report.unverified_competencies:
-            return AssessmentItemReport(target_role=report.target_role, items=[])
+        if not gap_competencies:
+            return {
+                "total_questions": 0,
+                "sections": [],
+                "message": (
+                    "Cannot generate assessment: No competency gaps identified."
+                ),
+            }
 
-        for gap in report.unverified_competencies:
-            query = f"{report.target_role} {gap.competency}"
-            retrieval_results = self.retrieve_uc.execute(query=query, top_k=2)
-            context_text = "\n".join([c.content for c in retrieval_results.citations])
-            source_chunk_ids = [c.chunk_id for c in retrieval_results.citations]
+        # 2 & 3. Retrieve Context FIRST, then Filter (Anti-Hallucination)
+        valid_gaps = []
+        subject_context = {}
+        subject_chunk_ids = {}
 
-            prompt = self.prompt_template.format(
-                target_role=report.target_role,
-                competency=gap.competency,
-                severity=gap.severity,
-                context_text=context_text
-                if context_text
-                else "Not enough information in the corpus.",
-            )
+        for c in gap_competencies:
+            retrieval_results = self.retrieve_uc.execute(query=c.competency, top_k=5)
+            if retrieval_results.citations:
+                context_text = "\n".join([cit.content for cit in retrieval_results.citations])
+                subject_context[c.competency] = context_text
+                subject_chunk_ids[c.competency] = [cit.chunk_id for cit in retrieval_results.citations]
+                valid_gaps.append(c)
 
-            item = self._generate_one_item(
-                prompt=prompt,
-                gap=gap,
-                target_role=report.target_role,
-                context_text=context_text,
-                source_chunk_ids=source_chunk_ids,
-                cancel_event=cancel_event,
-            )
-            items.append(item)
+        if not valid_gaps:
+            return {
+                "total_questions": 0,
+                "sections": [],
+                "message": (
+                    "Cannot generate assessment: No verified curriculum context available for the gaps."
+                ),
+            }
 
-        return AssessmentItemReport(target_role=report.target_role, items=items)
+        # 4. Reallocate Quotas
+        num_subjects = len(valid_gaps)
+        base_quota = 20 // num_subjects
+        remainder = 20 % num_subjects
 
-    def _generate_one_item(
-        self, prompt: str, gap, target_role: str, context_text: str, source_chunk_ids: list[str], cancel_event: "threading.Event | None" = None
-    ) -> AssessmentItem:
-        # raw_response starts as None so the except block below can tell
-        # apart "the LLM call itself failed" (raw_response still None,
-        # nothing to self-correct) from "the LLM responded but the JSON
-        # was malformed" (raw_response holds text worth retrying against).
+        quotas = {}
+        for i, c in enumerate(valid_gaps):
+            quotas[c.competency] = base_quota + (1 if i < remainder else 0)
+
+        # Combine context
+        context_parts = []
+        for c in valid_gaps:
+            context_parts.append(f"--- SUBJECT: {c.competency} ---\n{subject_context[c.competency]}")
+        combined_context = "\n\n".join(context_parts)
+
+        quotas_str = "\n".join([f"- {subject}: {q} questions" for subject, q in quotas.items()])
+        
+        prompt = self.prompt_template.format(
+            context=combined_context,
+            subject_quotas=quotas_str,
+            total_questions=20
+        )
         raw_response = None
         try:
-            raw_response = self.llm.complete(prompt=prompt, cancel_event=cancel_event)
+            raw_response = self.llm.complete(
+                prompt=prompt, 
+                cancel_event=cancel_event, 
+                max_tokens=8192,
+                response_format={"type": "json_object"}
+            )
             data = self._parse_json_response(raw_response)
-            return self._build_item(data, gap, target_role, source_chunk_ids)
-        except Exception:  # noqa: BLE001
-            if raw_response is not None:
+        except Exception as e:
+            print(f"Failed to generate or parse blueprint: {e}")
+            if raw_response:
+                print(f"Raw response: {raw_response}")
+            return AssessmentItemReport(target_role=gap_report.target_role, items=[])
+            
+        items = []
+        sections = data.get("sections", [])
+        for section in sections:
+            subject_name = section.get("subject", "Uncategorized")
+            chunk_ids = subject_chunk_ids.get(subject_name, [])
+            for q_data in section.get("questions", []):
                 try:
-                    fix_prompt = (
-                        f"Your previous response was not valid JSON matching the "
-                        f"required schema. Fix it and output ONLY valid JSON for "
-                        f"competency '{gap.competency}':\n{raw_response}"
-                    )
-                    retry_response = self.llm.complete(prompt=fix_prompt, cancel_event=cancel_event)
-                    data = self._parse_json_response(retry_response)
-                    return self._build_item(data, gap, target_role, source_chunk_ids)
-                except Exception as e:  # noqa: BLE001
-                    return self._fallback_item(gap, target_role, context_text, source_chunk_ids, e)
-            else:
-                # The LLM call itself failed (network/provider error) —
-                # nothing to self-correct against, go straight to fallback.
-                return self._fallback_item(
-                    gap, target_role, context_text, source_chunk_ids,
-                    RuntimeError("LLM call failed before any response was returned"),
-                )
+                    item = self._build_item(q_data, subject_name, gap_report.target_role, chunk_ids)
+                    problems = validate_item_semantics(item)
+                    if not problems:
+                        items.append(item)
+                    else:
+                        print(f"Skipping item due to validation problems: {problems}")
+                except Exception as e:
+                    print(f"Failed to build item: {e}")
+                
+        return AssessmentItemReport(target_role=gap_report.target_role, items=items)
 
     @staticmethod
     def _parse_json_response(raw_response: str) -> dict:
-        cleaned = raw_response.strip()
-        cleaned = cleaned.removeprefix("```json")
-        cleaned = cleaned.removesuffix("```")
-        cleaned = cleaned.strip()
-        return json.loads(cleaned)
+        start = raw_response.find('{')
+        end = raw_response.rfind('}')
+        if start != -1 and end != -1 and end >= start:
+            cleaned = raw_response[start:end+1]
+            return json.loads(cleaned)
+        raise ValueError("No JSON object found in response")
 
     def _build_item(
-        self, data: dict, gap, target_role: str, source_chunk_ids: list[str]
+        self, data: dict, subject: str, target_role: str, source_chunk_ids: list[str]
     ) -> AssessmentItem:
-        question_type = data.get("question_type", "multiple_choice")
-
-        # Robust options parsing (handles strings, stringified lists, or native lists)
+        question_type = "multiple_choice"
+        
         raw_options = data.get("options", [])
         if isinstance(raw_options, str):
             try:
@@ -148,14 +176,8 @@ class AssessmentGenerator:
 
         correct_answer = data.get("correct_answer", "").strip()
 
-        if question_type == "multiple_choice" and not options:
-            # Previously this raised ValueError uncaught, killing the
-            # whole generate_items() loop for every remaining competency.
-            # A degraded item for just this one competency is the correct
-            # scope of failure, not the entire batch.
-            question_type = "short_answer"
-
-        if question_type == "multiple_choice":
+        if question_type == "multiple_choice" and options:
+            options = [str(opt).strip() for opt in options]
             matched_option = next(
                 (
                     opt
@@ -168,40 +190,16 @@ class AssessmentGenerator:
             correct_answer = matched_option
 
         return AssessmentItem(
-            competency=gap.competency,
+            subject=subject,
+            competency=data.get("competency", "General"),
             target_role=target_role,
-            question_text=data.get(
-                "question_text", f"Evaluate understanding of {gap.competency}"
-            ),
+            question_text=data.get("question", "Evaluate understanding"),
             question_type=question_type,
             options=options,
             correct_answer=correct_answer,
+            distractor_rationales=data.get("distractor_rationales", {}),
             rationale=data.get("rationale", "Grounded via curriculum extraction."),
-            difficulty=data.get("difficulty", "intermediate"),
-            source_chunk_ids=source_chunk_ids,
-        )
-
-    @staticmethod
-    def _fallback_item(
-        gap, target_role: str, context_text: str, source_chunk_ids: list[str], error: Exception
-    ) -> AssessmentItem:
-        fallback_question = (
-            f"Based on the corpus documentation for {target_role}, "
-            f"explain the core principles, architecture, or implementation details regarding '{gap.competency}'."
-        )
-        clean_fallback_answer = (
-            context_text[:300].strip()
-            if context_text
-            else "Refer directly to official corpus documentation."
-        )
-        return AssessmentItem(
-            competency=gap.competency,
-            target_role=target_role,
-            question_text=fallback_question,
-            question_type="short_answer",
-            options=[],
-            correct_answer=clean_fallback_answer,
-            rationale=f"Generated dynamically from corpus context due to parser exception: {error!s}",
             difficulty="intermediate",
             source_chunk_ids=source_chunk_ids,
         )
+

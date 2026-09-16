@@ -92,3 +92,66 @@ def test_standards_mapper_deterministic_matching():
     sql_gap = next(g for g in report.gaps if "SQL" in g.competency)
     assert sql_gap.coverage_source == "unverified"
     assert sql_gap.severity == "critical"
+
+def test_hybrid_matching_deterministic_primary():
+    mock_retrieval = MagicMock(spec=HybridRetrieveUseCase)
+    mock_llm = MagicMock(spec=LlmProvider)
+    mock_llm.embed.return_value = [1.0, 0.0, 0.0]
+    
+    agent = StandardsMapper(retrieve_use_case=mock_retrieval, llm_provider=mock_llm)
+    
+    # Reset mock after init computes canonical embeddings
+    mock_llm.embed.reset_mock()
+    
+    # "React Component Design" and "Frontend Developer" both match the "frontend" domain deterministically
+    match = agent._find_matching_subject("React Component Design", ["Frontend Developer"])
+    
+    assert match == "Frontend Developer"
+    mock_llm.embed.assert_not_called()
+
+def test_hybrid_matching_fallback_success():
+    mock_retrieval = MagicMock(spec=HybridRetrieveUseCase)
+    mock_llm = MagicMock(spec=LlmProvider)
+    
+    def mock_embed(text):
+        if text == "frontend":
+            return [1.0, 0.0, 0.0]
+        if text == "Browser Client Development":
+            # Similarity with [1.0, 0.0, 0.0] is 0.8 (> 0.65)
+            return [0.8, 0.6, 0.0]
+        return [0.0, 1.0, 0.0]
+        
+    mock_llm.embed.side_effect = mock_embed
+    
+    agent = StandardsMapper(retrieve_use_case=mock_retrieval, llm_provider=mock_llm)
+    mock_llm.embed.reset_mock()
+    mock_llm.embed.side_effect = mock_embed
+    
+    # "Browser Client Development" doesn't hit deterministic keywords, triggering fallback
+    match = agent._find_matching_subject("React Component Design", ["Browser Client Development"])
+    
+    assert match == "Browser Client Development"
+    mock_llm.embed.assert_called_with("Browser Client Development")
+
+def test_hybrid_matching_fallback_failure():
+    mock_retrieval = MagicMock(spec=HybridRetrieveUseCase)
+    mock_llm = MagicMock(spec=LlmProvider)
+    
+    def mock_embed(text):
+        if text == "frontend":
+            return [1.0, 0.0, 0.0]
+        if text == "Baking a cake":
+            # Similarity with [1.0, 0.0, 0.0] is 0.0 (< 0.65)
+            return [0.0, 1.0, 0.0]
+        return [0.0, 0.0, 1.0]
+        
+    mock_llm.embed.side_effect = mock_embed
+    
+    agent = StandardsMapper(retrieve_use_case=mock_retrieval, llm_provider=mock_llm)
+    mock_llm.embed.reset_mock()
+    mock_llm.embed.side_effect = mock_embed
+    
+    match = agent._find_matching_subject("React Component Design", ["Baking a cake"])
+    
+    assert match is None
+    mock_llm.embed.assert_called_with("Baking a cake")

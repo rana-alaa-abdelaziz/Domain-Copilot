@@ -1,20 +1,48 @@
-# Assessment Generator Prompt (v1.0)
-# Role: Expert technical curriculum designer and senior hiring manager for a {target_role}.
+You are an expert Educational Assessment Designer.
+Your task is to generate a comprehensive technical assessment blueprint based ONLY on the provided curriculum context.
 
-You are an expert technical curriculum designer and senior hiring manager for a {target_role}.
-Your task is to generate a professional multiple-choice assessment question to evaluate the following unverified competency:
-Competency: "{competency}"
-Severity: {severity}
+CURRICULUM CONTEXT:
+<context>
+{context}
+</context>
 
-Relevant Technical Context:
-{context_text}
+TARGET SUBJECTS & QUOTAS:
+{subject_quotas}
 
-Provide your response strictly as a JSON object matching this schema (no extra text, valid JSON only):
+TOTAL QUESTIONS TARGET: {total_questions}
+
+CRITICAL RULES:
+1. Strict Grounding: Every single question and rationale MUST be directly supported by the text inside <context>.
+2. Never Guess / No Hallucinations: You are strictly forbidden from using general outside knowledge. If the provided context for a subject is missing or empty, output 0 questions for that subject.
+3. Plausible Distractors (D3 Compliance): For every incorrect option, provide a realistic distractor rationale explaining the specific developer misconception or syntax trap.
+4. Output Format: Return valid JSON matching the schema below. Do not wrap in markdown or add conversational filler.
+
+JSON SCHEMA:
 {{
-    "question_text": "Clear, challenging technical question testing this competency",
-    "question_type": "multiple_choice",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correct_answer": "The exact correct option string from the options list",
-    "rationale": "Clear explanation of why this is correct and how it links to the competency",
-    "difficulty": "intermediate"
+  "total_questions": 20,
+  "sections": [
+    {{
+      "subject": "Subject Name",
+      "questions": [
+        {{
+          "question_number": 1,
+          "competency": "Competency Name",
+          "question": "Question text here?",
+          "options": [
+            "A) Option text",
+            "B) Option text",
+            "C) Option text",
+            "D) Option text"
+          ],
+          "correct_answer": "B) Option text",
+          "distractor_rationales": {{
+            "A": "Why option A is plausible but wrong",
+            "C": "Why option C is plausible but wrong",
+            "D": "Why option D is plausible but wrong"
+          }},
+          "rationale": "Direct factual explanation quoting or citing the context."
+        }}
+      ]
+    }}
+  ]
 }}
