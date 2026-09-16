@@ -147,7 +147,11 @@ async def stream_ask(
     # Run the retrieval (fast, synchronous in thread)
     try:
         retrieval_result = await asyncio.to_thread(
-            retrieve_use_case.execute, query, top_k=3, doc_category=target_role or None
+            retrieve_use_case.execute, query, top_k=6
+            # No doc_category filter: chat reads from ALL uploaded documents
+            # regardless of whether they were tagged as 'requirement' or
+            # 'reference_curriculum'. Category filtering is only for the
+            # agent workflow (StandardsMapper), not the free-text Q&A.
         )
     except Exception:
         watcher.cancel()
