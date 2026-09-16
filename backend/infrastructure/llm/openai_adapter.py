@@ -7,6 +7,7 @@ application code depend on the LlmProvider port, never on this module.
 import logging
 import threading
 from collections.abc import Iterator
+from contextvars import ContextVar
 
 from openai import OpenAI
 
@@ -27,6 +28,10 @@ _CHAT_MODEL = "gpt-4o-mini"
 class OpenAIAdapter(LlmProvider):
     def __init__(self, api_key: str):
         self._client = OpenAI(api_key=api_key)
+        self._last_usage: ContextVar[dict | None] = ContextVar("openai_last_usage", default=None)
+
+    def get_last_usage(self) -> dict | None:
+        return self._last_usage.get()
 
     def complete(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> str:
         chunks = list(self.stream(prompt, cancel_event=cancel_event, **kwargs))
@@ -37,8 +42,9 @@ class OpenAIAdapter(LlmProvider):
         return "".join(chunks)
 
     def stream(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> Iterator[str]:
+        model = kwargs.pop("model", _CHAT_MODEL)
         stream = self._client.chat.completions.create(
-            model=kwargs.pop("model", _CHAT_MODEL),
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             stream=True,
             stream_options={"include_usage": True},
@@ -52,6 +58,11 @@ class OpenAIAdapter(LlmProvider):
             if chunk.usage:
                 # FR-9 cost accounting
                 logger.info(f"OpenAI usage: {chunk.usage.prompt_tokens} prompt, {chunk.usage.completion_tokens} completion")
+                self._last_usage.set({
+                    "prompt_tokens": chunk.usage.prompt_tokens,
+                    "completion_tokens": chunk.usage.completion_tokens,
+                    "model": model,
+                })
                 
             if chunk.choices and len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta.content
@@ -59,12 +70,21 @@ class OpenAIAdapter(LlmProvider):
                     yield delta
 
     def call_tool(self, prompt: str, tools: list, **kwargs) -> dict:
+        model = kwargs.pop("model", _CHAT_MODEL)
         response = self._client.chat.completions.create(
-            model=kwargs.pop("model", _CHAT_MODEL),
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             tools=tools,
             **kwargs,
         )
+        
+        if response.usage:
+            self._last_usage.set({
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "model": model,
+            })
+            
         message = response.choices[0].message
         if not message.tool_calls:
             return {"tool": None, "arguments": {}}

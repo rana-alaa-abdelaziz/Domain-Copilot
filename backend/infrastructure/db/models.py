@@ -15,6 +15,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -207,3 +208,17 @@ class PublishedCurriculum(Base):
     
     approved_by = Column(String, nullable=False)
     published_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+class LlmCallRecordModel(Base):
+    __tablename__ = "llm_call_record"
+
+    call_id = Column(String, primary_key=True)
+    correlation_id = Column(String, nullable=False, index=True)
+    thread_id = Column(String, nullable=True, index=True)
+    agent_name = Column(String, nullable=True)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    prompt_tokens = Column(Integer, nullable=False)
+    completion_tokens = Column(Integer, nullable=False)
+    estimated_cost_usd = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

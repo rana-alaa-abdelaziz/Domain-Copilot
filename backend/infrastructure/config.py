@@ -76,3 +76,19 @@ def get_llm_provider(settings: Settings | None = None) -> LlmProvider:
     raise ValueError(
         f"Unknown LLM_PROVIDER={settings.llm_provider!r}; expected 'openai' or 'ollama'"
     )
+
+
+def get_instrumented_llm_provider(session) -> LlmProvider:
+    """
+    Returns an LlmProvider wrapped with AccountingProvider that writes
+    token usage to the database after each call. Requires an active DB session.
+    """
+    base_provider = get_llm_provider()
+    
+    from backend.infrastructure.db.repositories.llm_call_repository import (
+        SqlAlchemyLlmCallRepository,
+    )
+    from backend.infrastructure.llm.accounting_provider import AccountingProvider
+    
+    repository = SqlAlchemyLlmCallRepository(session)
+    return AccountingProvider(provider=base_provider, repository=repository)
