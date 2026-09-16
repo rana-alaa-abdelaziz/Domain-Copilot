@@ -14,6 +14,7 @@ from dataclasses import dataclass
 class Citation:
     chunk_id: str
     doc_id: str
+    source: str
     content: str
     page: str | None
     standard_id: str | None

@@ -62,6 +62,7 @@ def reciprocal_rank_fusion(
             Citation(
                 chunk_id=chunk_id,
                 doc_id=row["doc_id"],
+                source=row.get("source", "Unknown"),
                 content=row["content"],
                 page=row.get("page"),
                 standard_id=row.get("standard_id"),

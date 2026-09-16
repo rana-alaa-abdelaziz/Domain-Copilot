@@ -197,7 +197,7 @@ Grounded Answer:"""
             }
             
             # Yield citations
-            cits = [{"document_id": c.doc_id, "score": c.fused_score} for c in retrieval_result.citations]
+            cits = [{"document_id": c.source, "score": c.fused_score} for c in retrieval_result.citations]
             yield {
                 "data": json.dumps({"type": "citations", "citations": cits})
             }
