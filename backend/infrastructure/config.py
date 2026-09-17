@@ -59,6 +59,10 @@ def get_llm_provider(settings: Settings | None = None) -> LlmProvider:
     """
     settings = settings or get_settings()
 
+    if settings.llm_provider == "stub":
+        from backend.infrastructure.llm.stub_adapter import StubLlmAdapter
+        return StubLlmAdapter()
+
     if settings.llm_provider == "ollama":
         from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
 
