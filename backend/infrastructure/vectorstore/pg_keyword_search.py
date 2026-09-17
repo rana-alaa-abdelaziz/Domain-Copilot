@@ -33,7 +33,7 @@ class PgKeywordSearch(KeywordSearchPort):
                 text(
                     f"""
                 SELECT chunk.chunk_id, chunk.doc_id, chunk.content, chunk.page,
-                       chunk.standard_id,
+                       chunk.standard_id, document.source,
                        ts_rank(chunk.search_vector, websearch_to_tsquery('english', :query_text)) AS score
                 FROM chunk
                 JOIN document ON document.doc_id = chunk.doc_id

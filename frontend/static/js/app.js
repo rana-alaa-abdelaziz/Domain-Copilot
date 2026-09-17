@@ -40,10 +40,52 @@ function updateAuthUI() {
             const buttons = reviewPanel.querySelectorAll("button");
             buttons.forEach(btn => btn.style.display = "inline-block");
         }
+        
+        // Fetch and render chat history
+        fetchChatHistory();
     } else {
         document.getElementById("login-overlay").style.display = "flex";
         document.getElementById("main-container").style.display = "none";
         currentUser = null;
+    }
+}
+
+async function fetchChatHistory() {
+    const chatBox = document.getElementById('ask-chat');
+    if (!chatBox) return;
+    
+    try {
+        const res = await apiFetch('/api/stream/history');
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        chatBox.innerHTML = '';
+        
+        data.messages.forEach(msg => {
+            const msgDiv = document.createElement('div');
+            msgDiv.style.marginBottom = '15px';
+            
+            if (msg.role === 'user') {
+                msgDiv.innerHTML = `<strong>You:</strong> <span>${escapeHTML(msg.content)}</span>`;
+            } else {
+                msgDiv.innerHTML = `<strong>Assistant:</strong> <div style="margin-top:5px;">${marked.parse(msg.content)}</div>`;
+                if (msg.citations && msg.citations.length > 0) {
+                    const citDiv = document.createElement('div');
+                    citDiv.className = 'citations';
+                    citDiv.style.marginTop = '10px';
+                    citDiv.style.fontSize = '0.85em';
+                    citDiv.style.color = '#555';
+                    citDiv.innerHTML = '<strong>Citations:</strong><ul>' + 
+                        msg.citations.map(c => `<li>File: ${escapeHTML(c.document_id)} (Score: ${c.score.toFixed(2)})</li>`).join('') +
+                        '</ul>';
+                    msgDiv.appendChild(citDiv);
+                }
+            }
+            chatBox.appendChild(msgDiv);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (err) {
+        console.error("Failed to load chat history:", err);
     }
 }
 
@@ -67,6 +109,23 @@ async function apiFetch(url, options = {}) {
 function logout() {
     localStorage.removeItem("token");
     currentToken = null;
+    
+    // Clear DOM state to prevent data leakage between sessions
+    const clearEl = (id) => { const el = document.getElementById(id); if (el) el.innerHTML = ""; };
+    clearEl("ask-chat");
+    clearEl("wf-log");
+    clearEl("ingest-result");
+    clearEl("trace-result");
+    
+    const tasksTbody = document.querySelector("#tasks-table tbody");
+    if (tasksTbody) tasksTbody.innerHTML = "";
+    
+    const compTbody = document.querySelector("#completed-tasks-table tbody");
+    if (compTbody) compTbody.innerHTML = "";
+    
+    const reviewPanel = document.getElementById("review-panel");
+    if (reviewPanel) reviewPanel.classList.add("hidden");
+    
     updateAuthUI();
 }
 
@@ -196,8 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (jsonData.type === "message") {
                             botMsgDiv.innerHTML += `<em>${jsonData.text}</em><br><br>`;
                         } else if (jsonData.type === "citations") {
-                            const citHtml = jsonData.citations.map(c => `<li>Doc ID: ${c.document_id} (Score: ${c.score.toFixed(2)})</li>`).join('');
-                            botMsgDiv.innerHTML += `<strong>Citations:</strong><ul>${citHtml}</ul><hr>`;
+                            if (jsonData.citations && jsonData.citations.length > 0) {
+                                const citHtml = jsonData.citations.map(c => `<li>File: ${c.document_id} (Score: ${c.score.toFixed(2)})</li>`).join('');
+                                botMsgDiv.innerHTML += `<strong>Citations:</strong><ul>${citHtml}</ul><hr>`;
+                            }
                         } else if (jsonData.type === "token") {
                             // parse markdown on the fly or just append text (app.js originally appended then parsed)
                             const currentText = botMsgDiv.getAttribute("data-raw") || "";
@@ -347,12 +408,22 @@ document.addEventListener('DOMContentLoaded', () => {
             
             data.tasks.forEach(task => {
                 const tr = document.createElement('tr');
+                
+                let actionHtml = '';
+                if (!task.assigned_reviewer_id) {
+                    actionHtml = `<button onclick="claimTask('${task.thread_id}')" style="background-color: #17a2b8;">Claim</button>`;
+                } else if (task.assigned_reviewer_id === currentUser.sub || task.assigned_reviewer_id === currentUser.user_id) {
+                    actionHtml = `<button onclick="openReview('${task.thread_id}')">Review</button>`;
+                } else {
+                    actionHtml = `<span style="color: #666; font-size: 0.9em;">Assigned to ${escapeHTML(task.assigned_reviewer_id)}</span>`;
+                }
+                
                 tr.innerHTML = `
                     <td>${task.thread_id}</td>
                     <td>${task.target_role}</td>
                     <td>${task.status}</td>
                     <td>
-                        <button onclick="openReview('${task.thread_id}')">Review</button>
+                        ${actionHtml}
                     </td>
                 `;
                 tableBody.appendChild(tr);
@@ -383,6 +454,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    window.claimTask = async function(thread_id) {
+        if (!currentUser) return;
+        try {
+            const res = await apiFetch(`/api/reviews/${thread_id}/assign`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reviewer_id: currentUser.user_id || currentUser.sub })
+            });
+            if (res.ok) {
+                // Refresh the table
+                fetchPendingTasks();
+            } else {
+                alert("Failed to claim task. You may not have permissions or it might already be assigned.");
+            }
+        } catch(e) {
+            console.error("Error claiming task:", e);
+        }
+    }
+    
     window.openReview = async function(thread_id) {
         try {
             const res = await apiFetch(`/api/reviews/${thread_id}/pending`);
@@ -393,7 +483,42 @@ document.addEventListener('DOMContentLoaded', () => {
             reviewComment.value = "";
             
             // Format the artifacts nicely as HTML
-            let html = `<h4>Competency Gap Report</h4>`;
+            
+            // Build Task Metadata Ribbon
+            let priorityColor = '#ccc';
+            const priority = data.review_task?.priority?.toLowerCase() || 'medium';
+            if (priority === 'critical') priorityColor = '#dc3545';
+            else if (priority === 'high') priorityColor = '#fd7e14';
+            else if (priority === 'medium') priorityColor = '#ffc107';
+            else priorityColor = '#17a2b8';
+
+            let slaText = 'No SLA';
+            let slaColor = '#555';
+            if (data.review_task?.sla_due_at) {
+                const dueTime = new Date(data.review_task.sla_due_at);
+                const now = new Date();
+                const diffHours = (dueTime - now) / (1000 * 60 * 60);
+                if (diffHours < 0) {
+                    slaText = '⚠️ SLA Breached';
+                    slaColor = '#dc3545';
+                } else if (diffHours < 24) {
+                    slaText = `Due in ${Math.round(diffHours)} hours`;
+                    slaColor = '#fd7e14';
+                } else {
+                    slaText = `Due in ${Math.round(diffHours/24)} days`;
+                    slaColor = '#28a745';
+                }
+            }
+
+            const assignee = data.review_task?.assigned_reviewer_id || 'Unassigned';
+
+            let html = `<div style="display: flex; gap: 10px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #ddd; align-items: center;">
+                <span style="background: ${priorityColor}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em;">${escapeHTML(priority.toUpperCase())}</span>
+                <span style="color: ${slaColor}; font-weight: bold; font-size: 0.9em;">⏱️ ${escapeHTML(slaText)}</span>
+                <span style="margin-left: auto; font-size: 0.9em; color: #444;">👤 Assigned to: <strong>${escapeHTML(assignee)}</strong></span>
+            </div>`;
+            
+            html += `<h4>Competency Gap Report</h4>`;
             if (data.competency_gap_report && data.competency_gap_report.gaps && data.competency_gap_report.gaps.length > 0) {
                 data.competency_gap_report.gaps.forEach(gap => {
                     const statusColor = gap.coverage_source === 'unverified' ? '#cc0000' : '#0066cc';
@@ -424,6 +549,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         html += `<strong>Correct Answer:</strong> ${escapeHTML(item.correct_answer)}<br>`;
                     }
                     html += `<span style="font-size: 0.9em; color: #555;"><strong>Rationale:</strong> ${escapeHTML(item.rationale)}</span><br>`;
+                    
+                    if (item.question_type === 'multiple_choice' && item.distractor_rationales && Object.keys(item.distractor_rationales).length > 0) {
+                        html += `<div style="margin-top: 8px; margin-bottom: 8px; padding: 8px; background: #fafafa; border-left: 3px solid #f39c12;">`;
+                        html += `<strong style="font-size: 0.9em; color: #555;">Distractor Breakdown:</strong><ul style="margin: 4px 0 0 0; padding-left: 20px; font-size: 0.85em; color: #666;">`;
+                        for (const [optKey, distRationale] of Object.entries(item.distractor_rationales)) {
+                            html += `<li><strong>${escapeHTML(optKey)}:</strong> ${escapeHTML(distRationale)}</li>`;
+                        }
+                        html += `</ul></div>`;
+                    }
+                    
                     html += `<span style="font-size: 0.8em; color: #888;">Competency Tested: ${escapeHTML(item.competency)} (${escapeHTML(item.difficulty)})</span>`;
                     html += `</div>`;
                 });

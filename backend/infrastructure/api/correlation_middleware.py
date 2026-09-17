@@ -17,6 +17,10 @@ def get_correlation_id() -> str:
 def get_current_agent() -> str | None:
     return _current_agent.get()
 
+def set_current_agent(name: str | None) -> None:
+    """Set the current agent name in the context for LLM call accounting."""
+    _current_agent.set(name)
+
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Read from header or generate a new UUID4

@@ -78,7 +78,7 @@ class PgVectorStore(VectorStore):
                 text(
                     f"""
                 SELECT chunk.chunk_id, chunk.doc_id, chunk.content, chunk.page,
-                       chunk.standard_id,
+                       chunk.standard_id, document.source,
                        1 - (chunk.embedding <=> CAST(:query_vector AS vector)) AS score
                 FROM chunk
                 JOIN document ON document.doc_id = chunk.doc_id

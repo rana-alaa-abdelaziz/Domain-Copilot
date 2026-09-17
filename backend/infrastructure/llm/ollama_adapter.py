@@ -44,10 +44,23 @@ class OllamaAdapter(LlmProvider):
 
     def stream(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> Iterator[str]:
         model = kwargs.pop("model", _CHAT_MODEL)
+        
+        chat_kwargs = {}
+        options = {}
+        
+        if "max_tokens" in kwargs:
+            options["num_predict"] = kwargs["max_tokens"]
+        if options:
+            chat_kwargs["options"] = options
+            
+        if "response_format" in kwargs and kwargs["response_format"].get("type") == "json_object":
+            chat_kwargs["format"] = "json"
+            
         stream = self._client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             stream=True,
+            **chat_kwargs
         )
         for chunk in stream:
             if cancel_event and cancel_event.is_set():

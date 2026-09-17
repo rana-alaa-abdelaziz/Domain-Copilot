@@ -8,6 +8,7 @@ or LangGraph imports.
 
 import contextlib
 import json
+import math
 import re
 import threading
 from pathlib import Path
@@ -53,6 +54,15 @@ GENERIC_STOPWORDS = {
 }
 
 
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    magnitude1 = math.sqrt(sum(a * a for a in vec1))
+    magnitude2 = math.sqrt(sum(b * b for b in vec2))
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+    return dot_product / (magnitude1 * magnitude2)
+
+
 class StandardsMapper:
     def __init__(
         self,
@@ -63,6 +73,9 @@ class StandardsMapper:
         self._retrieve = retrieve_use_case
         self._llm_provider = llm_provider
         self._prompt_path = prompt_path or DEFAULT_PROMPT_PATH
+        self._canonical_embeddings: dict[str, list[float]] = {}
+        for canonical_subject in DOMAIN_KEYWORDS:
+            self._canonical_embeddings[canonical_subject] = self._llm_provider.embed(canonical_subject)
 
     @staticmethod
     def _parse_skills_list(text: str) -> list[str]:
@@ -87,9 +100,8 @@ class StandardsMapper:
 
         return []
 
-    @staticmethod
     def _find_matching_subject(
-        skill: str, user_reported_subjects: list[str]
+        self, skill: str, user_reported_subjects: list[str]
     ) -> str | None:
         """
         Absolute domain partitioning check. Ensures cross-domain contamination is blocked.
@@ -143,7 +155,41 @@ class StandardsMapper:
                 best_score = score
                 best_match = subject
 
-        return best_match
+        if best_match is not None:
+            return best_match
+            
+        # Step 2: Vector Embedding (Fallback)
+        try:
+            skill_embedding = None
+            if not skill_domain:
+                skill_embedding = self._llm_provider.embed(skill)
+
+            for subject in user_reported_subjects:
+                subject_embedding = self._llm_provider.embed(subject)
+                
+                if skill_domain:
+                    best_sim = -1.0
+                    best_canonical = None
+                    
+                    # Step 4: Relative Similarity Scoring
+                    for canonical, canonical_emb in self._canonical_embeddings.items():
+                        sim = cosine_similarity(subject_embedding, canonical_emb)
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_canonical = canonical
+                    
+                    # Step 5: Safe Thresholding
+                    if best_sim > 0.65 and best_canonical == skill_domain:
+                        return subject
+                else:
+                    # If skill didn't match a canonical domain, compare directly
+                    sim = cosine_similarity(subject_embedding, skill_embedding)
+                    if sim > 0.70:  # Use a slightly higher threshold for direct comparison
+                        return subject
+        except Exception as e:  # noqa: BLE001
+            print(f"Embedding fallback failed: {e}")
+
+        return None
 
     def run(
         self,
@@ -182,7 +228,6 @@ class StandardsMapper:
         llm_output = self._llm_provider.complete(
             prompt=prompt,
             cancel_event=cancel_event,
-            options={"temperature": 0.0, "num_ctx": 2048},
         )
         extracted_skills = self._parse_skills_list(llm_output)
 

@@ -1,20 +1,38 @@
-# Assessment Generator Prompt (v1.0)
-# Role: Expert technical curriculum designer and senior hiring manager for a {target_role}.
+You are an expert Educational Assessment Designer.
+Your task is to generate a technical assessment containing EXACTLY {total_questions} questions for the target subject: {target_subject}.
 
-You are an expert technical curriculum designer and senior hiring manager for a {target_role}.
-Your task is to generate a professional multiple-choice assessment question to evaluate the following unverified competency:
-Competency: "{competency}"
-Severity: {severity}
+CURRICULUM CONTEXT:
+<context>
+{context}
+</context>
 
-Relevant Technical Context:
-{context_text}
+CRITICAL RULES:
+1. Strict Grounding: Every single question and rationale MUST be directly supported by the text inside <context>.
+2. Never Guess / No Hallucinations: Do not use general outside knowledge. If the context does not contain enough information to write a question, reduce the question count rather than fabricate content.
+3. Plausible Distractors (D3 Compliance): For every incorrect option, provide a realistic distractor rationale explaining the specific developer misconception or syntax trap.
+4. Output Format: Return valid JSON matching the schema below. Do not wrap in markdown or add conversational filler.
 
-Provide your response strictly as a JSON object matching this schema (no extra text, valid JSON only):
+JSON SCHEMA:
 {{
-    "question_text": "Clear, challenging technical question testing this competency",
-    "question_type": "multiple_choice",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correct_answer": "The exact correct option string from the options list",
-    "rationale": "Clear explanation of why this is correct and how it links to the competency",
-    "difficulty": "intermediate"
+  "subject": "Name of the Subject",
+  "questions": [
+    {{
+      "question_number": 1,
+      "competency": "Specific topic from context",
+      "question": "Question text here?",
+      "options": [
+        "A) Option text",
+        "B) Option text",
+        "C) Option text",
+        "D) Option text"
+      ],
+      "correct_answer": "B",
+      "distractor_rationales": {{
+        "A": "Why option A is plausible but wrong",
+        "C": "Why option C is plausible but wrong",
+        "D": "Why option D is plausible but wrong"
+      }},
+      "rationale": "Direct factual explanation quoting or citing the context."
+    }}
+  ]
 }}

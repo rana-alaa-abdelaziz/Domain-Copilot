@@ -221,4 +221,16 @@ class LlmCallRecordModel(Base):
     prompt_tokens = Column(Integer, nullable=False)
     completion_tokens = Column(Integer, nullable=False)
     estimated_cost_usd = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+class ChatMessageModel(Base):
+    __tablename__ = "chat_message"
+
+    message_id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False, index=True)
+    role = Column(String, nullable=False) # "user" or "assistant"
+    content = Column(Text, nullable=False)
+    
+    from sqlalchemy.dialects.postgresql import JSONB
+    citations = Column(JSONB, nullable=True) # JSON array of citations
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

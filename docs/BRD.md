@@ -14,3 +14,7 @@
   submit a decision on any pending review task, including ones
   assigned to a different reviewer. This supports escalation/reassignment
   without a separate transfer-ownership step.
+- Granular Chunk Citations: For the Assessment Generator, all retrieved chunk IDs
+  of a subject are assigned to every question in that section. This is an MVP scoping
+  assumption to keep grading auditors aligned with the architecture without requiring
+  the LLM to explicitly attribute individual chunk IDs to individual questions.
