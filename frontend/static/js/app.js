@@ -415,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (task.assigned_reviewer_id === currentUser.sub || task.assigned_reviewer_id === currentUser.user_id) {
                     actionHtml = `<button onclick="openReview('${task.thread_id}')">Review</button>`;
                 } else {
-                    actionHtml = `<span style="color: #666; font-size: 0.9em;">Assigned to ${escapeHTML(task.assigned_reviewer_id)}</span>`;
+                    actionHtml = `<button onclick="claimTask('${task.thread_id}')" style="background-color: #17a2b8;">Claim</button>`;
                 }
                 
                 tr.innerHTML = `
@@ -533,8 +533,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             html += `<h4>Generated Assessment Questions</h4>`;
-            if (data.assessment_report && data.assessment_report.items) {
-                data.assessment_report.items.forEach((item, idx) => {
+            const assessmentItems = data.assessment_report?.items || [];
+            if (assessmentItems.length > 0) {
+                assessmentItems.forEach((item, idx) => {
                     html += `<div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
                         <strong>Q${idx + 1}: ${escapeHTML(item.question_text)}</strong><br>`;
                     
@@ -562,6 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<span style="font-size: 0.8em; color: #888;">Competency Tested: ${escapeHTML(item.competency)} (${escapeHTML(item.difficulty)})</span>`;
                     html += `</div>`;
                 });
+            } else if (data.workflow_error) {
+                html += `<p style="color: #b00020;">No questions were generated. ${escapeHTML(data.workflow_error)}</p>`;
             } else {
                 html += `<p>No assessment items available.</p>`;
             }

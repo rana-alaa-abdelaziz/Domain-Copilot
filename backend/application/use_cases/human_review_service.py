@@ -44,6 +44,7 @@ class HumanReviewService:
             "competency_gap_report": state.values.get("competency_gap_report"),
             "module_outline_report": state.values.get("module_outline_report"),
             "assessment_report": state.values.get("assessment_report"),
+            "workflow_error": state.values.get("error"),
             "review_task": review_task,  # priority, SLA, assignment — the T5 queue fields
         }
 

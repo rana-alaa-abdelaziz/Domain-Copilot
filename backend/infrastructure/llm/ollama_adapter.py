@@ -8,6 +8,7 @@ Requires `ollama pull llama3` and `ollama pull nomic-embed-text` locally.
 """
 
 import logging
+import os
 import threading
 from collections.abc import Iterator
 from contextvars import ContextVar
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 # its own embeddings down to 768 via the `dimensions` param, so the two
 # adapters are interchangeable behind one pgvector column width.
 _EMBEDDING_MODEL = "nomic-embed-text"
-_CHAT_MODEL = "llama3"
+_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3")
 
 
 class OllamaAdapter(LlmProvider):

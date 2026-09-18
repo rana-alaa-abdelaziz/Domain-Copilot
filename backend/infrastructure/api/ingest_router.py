@@ -1,7 +1,5 @@
 # ruff: noqa: B008
-import os
 import shutil
-import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -23,33 +21,31 @@ def ingest_file(
     """
     pipeline = request.app.state.ingest_pipeline
     
-    # Save the uploaded file to a temporary file
-    temp_dir = tempfile.mkdtemp()
-    temp_path = Path(temp_dir) / file.filename
+    # Save the uploaded file to the corpus/uploaded directory
+    base_dir = Path(__file__).resolve().parents[4]
+    corpus_dir = base_dir / "corpus" / "standards"
+    corpus_dir.mkdir(parents=True, exist_ok=True)
     
-    try:
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Execute ingestion pipeline
-        result = pipeline.execute(
-            file_path=temp_path,
-            source=file.filename or "UI Upload",
-            version="1.0",
-            doc_category=doc_category
-        )
+    file_path = corpus_dir / file.filename
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
         
-        doc = result.ingestion.document if result.ingestion and hasattr(result.ingestion, "document") else None
-        doc_id = doc.doc_id if doc else None
-        
-        return {
-            "message": "Ingestion successful" if not result.ingestion.was_skipped else "Ingestion skipped (already exists)",
-            "document_id": doc_id,
-            "status": doc.status.value if doc and hasattr(doc, "status") else "unknown",
-            "chunks_extracted": len(result.chunking.chunks) if result.chunking else 0,
-            "chunks_embedded": result.embedding.embedded_count if result.embedding else 0
-        }
-    finally:
-        # Cleanup
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+    # Execute ingestion pipeline
+    result = pipeline.execute(
+        file_path=file_path,
+        source=file.filename or "UI Upload",
+        version="1.0",
+        doc_category=doc_category
+    )
+    
+    doc = result.ingestion.document if result.ingestion and hasattr(result.ingestion, "document") else None
+    doc_id = doc.doc_id if doc else None
+    
+    return {
+        "message": "Ingestion successful" if not result.ingestion.was_skipped else "Ingestion skipped (already exists)",
+        "document_id": doc_id,
+        "status": doc.status.value if doc and hasattr(doc, "status") else "unknown",
+        "chunks_extracted": len(result.chunking.chunks) if result.chunking else 0,
+        "chunks_embedded": result.embedding.embedded_count if result.embedding else 0
+    }
