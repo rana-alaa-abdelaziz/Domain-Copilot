@@ -1,7 +1,8 @@
 services:
   api:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -9,11 +10,16 @@ services:
       - VECTOR_STORE_URL=${VECTOR_STORE_URL}
       - LLM_PROVIDER=${LLM_PROVIDER}
       - LLM_API_KEY=${LLM_API_KEY}
+      - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+        required: true
+      ollama:
+        condition: service_healthy
+        required: true
     volumes:
-      - ./backend:/app
-      - ./scripts:/app/scripts
+      - ./:/app
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -24,8 +30,26 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  ollama_data:
