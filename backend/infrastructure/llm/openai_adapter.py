@@ -26,8 +26,18 @@ _CHAT_MODEL = "gpt-4o-mini"
 
 
 class OpenAIAdapter(LlmProvider):
-    def __init__(self, api_key: str):
-        self._client = OpenAI(api_key=api_key)
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str | None = None,
+        chat_model: str = _CHAT_MODEL,
+        embedding_model: str = _EMBEDDING_MODEL,
+        embedding_provider: LlmProvider | None = None,
+    ):
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._chat_model = chat_model
+        self._embedding_model = embedding_model
+        self._embedding_provider = embedding_provider
         self._last_usage: ContextVar[dict | None] = ContextVar("openai_last_usage", default=None)
 
     def get_last_usage(self) -> dict | None:
@@ -42,7 +52,7 @@ class OpenAIAdapter(LlmProvider):
         return "".join(chunks)
 
     def stream(self, prompt: str, cancel_event: threading.Event | None = None, **kwargs) -> Iterator[str]:
-        model = kwargs.pop("model", _CHAT_MODEL)
+        model = kwargs.pop("model", self._chat_model)
         stream = self._client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -70,7 +80,7 @@ class OpenAIAdapter(LlmProvider):
                     yield delta
 
     def call_tool(self, prompt: str, tools: list, **kwargs) -> dict:
-        model = kwargs.pop("model", _CHAT_MODEL)
+        model = kwargs.pop("model", self._chat_model)
         response = self._client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -92,8 +102,11 @@ class OpenAIAdapter(LlmProvider):
         return {"tool": call.function.name, "arguments": call.function.arguments}
 
     def embed(self, text: str) -> list[float]:
+        if self._embedding_provider is not None:
+            return self._embedding_provider.embed(text)
+
         response = self._client.embeddings.create(
-            model=_EMBEDDING_MODEL,
+            model=self._embedding_model,
             input=text,
             dimensions=_EMBEDDING_DIM,
         )

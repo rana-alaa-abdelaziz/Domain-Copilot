@@ -1,6 +1,7 @@
 import json
 import logging
 import threading
+import time
 from pathlib import Path
 
 from backend.application.use_cases.hybrid_retrieve import HybridRetrieveUseCase
@@ -162,6 +163,9 @@ class AssessmentGenerator:
                         gap.competency,
                         exc,
                     )
+            
+            # Avoid Gemini Free Tier rate limits (15 RPM)
+            time.sleep(11)
 
         return AssessmentItemReport(
             target_role=gap_report.target_role,

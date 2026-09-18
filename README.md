@@ -39,8 +39,10 @@ Open `.env` and set these values:
 | `POSTGRES_DB` | ✅ | `domain_copilot` |
 | `DATABASE_URL` | ✅ | `postgresql://postgres:postgres@postgres:5432/domain_copilot` |
 | `VECTOR_STORE_URL` | ✅ | same as `DATABASE_URL` |
-| `LLM_PROVIDER` | ✅ | `ollama` (local, free) or `openai` |
-| `LLM_API_KEY` | Only if `openai` | your OpenAI key |
+| `LLM_PROVIDER` | ✅ | `ollama` (local, free), `openai`, or `gemini` |
+| `OPENAI_API_KEY` | Only if `openai` | your OpenAI key |
+| `GEMINI_API_KEY` | Only if `gemini` | your Gemini API key |
+| `OLLAMA_BASE_URL` | Optional | `http://ollama:11434` (Docker-internal) |
 | `SECRET_KEY` | Optional in dev | any long random string |
 | `APP_ENV` | Optional | `development` (auto-generates a JWT secret) |
 
@@ -102,7 +104,29 @@ This creates all the database tables (`document`, `chunk`, `users`, `review_task
 
 ---
 
-### Step 5 — Open the app
+### Step 5 — Seed the Database
+
+Run this script to create the default users:
+```powershell
+docker compose exec api python backend/scripts/seed_users.py
+```
+This creates the following users you can log in with:
+- **Instructor**: `instructor@example.com` / `password123`
+- **Lead Instructor**: `lead@example.com` / `password123`
+
+---
+
+### Step 6 — Ingest Knowledge Base
+
+Run this script to embed the curriculum documents into the vector database:
+```powershell
+docker compose exec api python backend/scripts/run_full_ingestion.py
+```
+*Note: This might take a few minutes if using local Ollama. With Gemini or OpenAI, it will be very fast.*
+
+---
+
+### Step 7 — Open the app
 
 | What | URL |
 |---|---|
@@ -173,7 +197,7 @@ The API container crashed at startup (usually the missing model error above). Fi
 Set in `.env`:
 ```
 LLM_PROVIDER=openai
-LLM_API_KEY=sk-...your-key...
+OPENAI_API_KEY=sk-...your-key...
 ```
 
 Then restart:

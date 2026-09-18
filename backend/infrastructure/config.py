@@ -2,7 +2,7 @@
 Centralized environment configuration and the LlmProvider factory.
 
 Satisfies the provider-abstraction requirement that provider selection is
-config-driven, not hardcoded: set LLM_PROVIDER=openai or LLM_PROVIDER=ollama
+config-driven, not hardcoded: set LLM_PROVIDER=openai, ollama, nvidia, or gemini
 in .env and get_llm_provider() returns the matching adapter with no code
 change required elsewhere.
 """
@@ -19,6 +19,15 @@ class Settings:
         self.database_url = os.environ.get("DATABASE_URL", "")
         self.llm_provider = os.environ.get("LLM_PROVIDER", "openai").lower()
         self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        self.nvidia_api_key = os.environ.get("NVIDIA_API_KEY", "") or os.environ.get("LLM_API_KEY", "")
+        self.nvidia_base_url = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+        self.nvidia_chat_model = os.environ.get("NVIDIA_CHAT_MODEL", "meta/llama-3.1-8b-instruct")
+        self.nvidia_embedding_model = os.environ.get(
+            "NVIDIA_EMBEDDING_MODEL", "nvidia/llama-3.2-nv-embedqa-1b-v2"
+        )
+        self.nvidia_embedding_provider = os.environ.get("NVIDIA_EMBEDDING_PROVIDER", "ollama").lower()
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
         self.ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         self.embedding_dim = 768
 
@@ -77,8 +86,32 @@ def get_llm_provider(settings: Settings | None = None) -> LlmProvider:
 
         return OpenAIAdapter(api_key=settings.openai_api_key)
 
+    if settings.llm_provider == "nvidia":
+        from backend.infrastructure.llm.openai_adapter import OpenAIAdapter
+
+        embedding_provider = None
+        if settings.nvidia_embedding_provider == "ollama":
+            from backend.infrastructure.llm.ollama_adapter import OllamaAdapter
+
+            embedding_provider = OllamaAdapter(base_url=settings.ollama_base_url)
+        elif settings.nvidia_embedding_provider != "nvidia":
+            raise ValueError("NVIDIA_EMBEDDING_PROVIDER must be 'ollama' or 'nvidia'")
+
+        return OpenAIAdapter(
+            api_key=settings.nvidia_api_key,
+            base_url=settings.nvidia_base_url,
+            chat_model=settings.nvidia_chat_model,
+            embedding_model=settings.nvidia_embedding_model,
+            embedding_provider=embedding_provider,
+        )
+
+    if settings.llm_provider == "gemini":
+        from backend.infrastructure.llm.gemini_adapter import GeminiAdapter
+
+        return GeminiAdapter(api_key=settings.gemini_api_key, model_name=settings.gemini_model)
+
     raise ValueError(
-        f"Unknown LLM_PROVIDER={settings.llm_provider!r}; expected 'openai' or 'ollama'"
+        f"Unknown LLM_PROVIDER={settings.llm_provider!r}; expected 'openai', 'ollama', 'nvidia', 'gemini' or 'stub'"
     )
 
 
